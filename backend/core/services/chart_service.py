@@ -2,10 +2,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import pandas_ta as ta
-from typing import List, Dict
+from typing import List, Dict, Any
 from models.schemas import OHLCVPoint
 
-def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", theme: str = "dark", chart_type: str = "candlestick", indicators: List[str] = None) -> Dict[str, str]:
+def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", theme: str = "dark", chart_type: str = "candlestick", indicators: List[str] = None, vlines: List[Any] = None) -> Dict[str, str]:
     """
     Generates a dictionary of Plotly HTML chart strings from OHLCV data.
     """
@@ -139,6 +139,15 @@ def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", them
             fig_main.add_trace(go.Scatter(x=df['timestamp_dt'], y=df[bbu_col], mode='lines', name='Upper Band', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dash')))
         if bbl_col:
             fig_main.add_trace(go.Scatter(x=df['timestamp_dt'], y=df[bbl_col], mode='lines', name='Lower Band', line=dict(color='rgba(128,128,128,0.5)', width=1, dash='dash')))
+
+    # Add Vertical Lines for Validation Points
+    if vlines:
+        for v in vlines:
+            try:
+                ts = pd.to_datetime(v, unit='ms') if isinstance(v, (int, float)) else pd.to_datetime(v)
+                fig_main.add_vline(x=ts, line_width=1.5, line_dash="dash", line_color="#d97706", opacity=0.8)
+            except:
+                pass
 
     fig_main.update_layout(
         template=template,

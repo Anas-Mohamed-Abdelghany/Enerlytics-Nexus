@@ -13,14 +13,67 @@ export default function Forecaster({ plotlyHtml, predictionResult, isPredicting,
           AI Price Forecast
         </h2>
         {predictionResult && predictionResult.feature_importance && (
-          <div style={{ display: "flex", gap: "1rem" }}>
-            {Object.entries(predictionResult.feature_importance).slice(0, 3).map(([k, v]) => (
-              <div key={k} style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                <span style={{ textTransform: "uppercase", opacity: 0.7 }}>{k}:</span> 
-                <span style={{ marginLeft: "0.25rem", color: "var(--accent-secondary)", fontWeight: "600" }}>{typeof v === 'number' ? v.toFixed(2) : v}</span>
-              </div>
-            ))}
-          </div>
+          <>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+              {predictionResult.training_score !== undefined && (
+                <div style={{ 
+                  padding: "0.35rem 0.75rem", 
+                  borderRadius: "20px", 
+                  background: "rgba(34, 197, 94, 0.15)", 
+                  border: "1px solid rgba(34, 197, 94, 0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}>
+                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 10px #22c55e" }} />
+                  <span style={{ fontSize: "0.85rem", color: "#22c55e", fontWeight: "700" }}>
+                    Training: {predictionResult.training_score}%
+                  </span>
+                </div>
+              )}
+
+              {predictionResult.validation_score !== undefined && (
+                <div style={{ 
+                  padding: "0.35rem 0.75rem", 
+                  borderRadius: "20px", 
+                  background: "rgba(6, 182, 212, 0.1)", 
+                  border: "1px solid rgba(6, 182, 212, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}>
+                  <span style={{ fontSize: "0.78rem", color: "#06b6d4", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.02em" }}>
+                    Validation: <span style={{ color: "var(--text-primary)" }}>{predictionResult.validation_score}%</span>
+                  </span>
+                </div>
+              )}
+
+              {predictionResult.check_score !== undefined && (
+                <div style={{ 
+                  padding: "0.35rem 0.75rem", 
+                  borderRadius: "20px", 
+                  background: "rgba(245, 158, 11, 0.1)", 
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem"
+                }}>
+                  <span style={{ fontSize: "0.78rem", color: "#d97706", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.02em" }}>
+                    Check: <span style={{ color: "var(--text-primary)" }}>{predictionResult.check_score}%</span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: "1rem" }}>
+              {Object.entries(predictionResult.feature_importance).slice(0, 3).map(([k, v]) => (
+                <div key={k} style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                  <span style={{ textTransform: "uppercase", opacity: 0.7 }}>{k}:</span> 
+                  <span style={{ marginLeft: "0.25rem", color: "var(--accent-secondary)", fontWeight: "600" }}>{typeof v === 'number' ? v.toFixed(2) : v}</span>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 

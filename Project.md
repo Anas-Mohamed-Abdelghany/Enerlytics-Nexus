@@ -30,7 +30,6 @@ This document outlines the high-performance features implemented in the **Enerly
 
 ### 4. Strategy Optimization Engine
 *   **Automated Strategy Selection**: A backend engine that evaluates multiple trading models (Trend Trading, Mean Reversion, etc.) and identifies the "Best Fit" for current market conditions.
-*   **Real-Time Backtesting**: Simulating strategy performance over 1000+ data points to provide win rates and performance scores.
 
 ---
 
@@ -45,16 +44,6 @@ This document outlines the high-performance features implemented in the **Enerly
 *   **Quick Convert Utility**: Built-in currency and commodity conversion tools integrated directly into the dashboard flow.
 *   **KPI Tracking**: Real-time calculation of Volatility, Period Change, and Candle counts for any fetched dataset.
 - **Model Selection (Bonus):** A dropdown to switch between different ML models you might have trained (e.g., ARIMA, LSTM, Prophet) and compare their forecasts.
-
-### 3. Trading Strategy Simulator
-- **Backtesting Section:** A dedicated page to run simulations on historical data.
-- **Input Parameters:** Allow the user to set a start/end date and an initial virtual investment amount.
-- **Results Display:**
-    - **Profit & Loss (P&L):** Show the final profit or loss from the simulation.
-    - **Return on Investment (ROI):** Display the P&L as a percentage.
-    - **Trade Log:** A table showing every "BUY" and "SELL" action the AI took.
-    - **Equity Curve:** A graph showing the portfolio's value over the simulation period.
-
 
 ## Tier 2: UI/UX Features (The Professional Polish)
 
@@ -93,8 +82,7 @@ This document outlines the high-performance features implemented in the **Enerly
     - **Balanced:** A mix of the two.
 - Show how P&L and trade frequency change based on the selected profile.
 
-
-## Tier 4: Enterprise & Scalability Features (Think Like a Startup)
+---
 
 *These features demonstrate forward-thinking and an understanding of real-world applications.*
 
@@ -120,7 +108,7 @@ This document outlines the high-performance features implemented in the **Enerly
   }
 
 ### 12. Automated PDF Reporting
-- A "Download Report" button that generates a professional PDF summary of a backtest simulation, including key metrics, charts, and top trades.
+- A "Download Report" button that generates a professional PDF summary of the current market analysis and forecasts.
 
 ### 13. Custom Alerting System
 - Allow users to set up custom email or on-screen notifications for:
@@ -158,15 +146,11 @@ This document outlines the high-performance features implemented in the **Enerly
 ### 18. "Beat the AI" Trading Game
 - A real-time game where a user can trade on a historical data segment and compare their final profit against the AI's profit over the same period.
 
-### 19. Educational "Why?" Explanations
+### 18. Educational "Why?" Explanations
 - An info icon next to AI recommendations that, when clicked, provides a plain-language explanation of the factors driving the decision.
 
-### 20. Interactive Market Events Timeline
+### 19. Interactive Market Events Timeline
 - Overlay clickable icons on the price chart for major historical events (e.g., geopolitical conflicts, plant outages) to show how the market reacted.
-
-### 21. Backtesting Leaderboard
-- A public leaderboard showing the most profitable simulations run on the platform, encouraging users to experiment with different parameters.
-
 
 -----------------------------------------------------------------------------------------------------
 

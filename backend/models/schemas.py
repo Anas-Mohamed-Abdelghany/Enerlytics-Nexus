@@ -67,31 +67,3 @@ class ForecastResponse(BaseModel):
     prediction:   Optional[str]     = Field(None, description="UP, DOWN, or STABLE (for classification)")
     feature_importance: Optional[dict] = Field(None, description="XAI feature importance scores")
 
-
-# ─── Simulator ────────────────────────────────────────────────────────────────
-
-class TradeLogEntry(BaseModel):
-    timestamp: datetime = Field(...)
-    action:    str      = Field(..., description="BUY or SELL")
-    price:     float    = Field(...)
-    quantity:  float    = Field(...)
-    pnl:       float    = Field(...)
-
-
-class SimulationRequest(BaseModel):
-    market:          str            = Field("US-TEXAS")
-    start_days_ago:  int            = Field(30, ge=1)
-    end_days_ago:    int            = Field(0, ge=0)
-    initial_capital: float          = Field(10000.0, ge=0)
-    risk_profile:    str            = Field("Balanced")
-    series:          Optional[List[OHLCVPoint]] = Field(None)
-
-class BacktestResults(BaseModel):
-    market:          str            = Field(...)
-    start_date:      datetime       = Field(...)
-    end_date:        datetime       = Field(...)
-    initial_capital: float          = Field(..., ge=0)
-    final_capital:   float          = Field(..., ge=0)
-    total_return_pct: float         = Field(...)
-    roi_pct:         float          = Field(...)
-    trade_log:       List[TradeLogEntry] = Field(...)

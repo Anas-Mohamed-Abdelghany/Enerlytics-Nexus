@@ -14,7 +14,7 @@
 
 - **Multi-Asset Intelligence**: Integration with 10+ specialized data providers including US EIA, Ember, Alpha Vantage, and more.
 - **Predictive Analytics Suite**: Dual-mode forecasting for price regression and directional classification using LSTM & Bi-LSTM models.
-- **Strategy Optimization Engine**: Automated evaluation of trading models (Trend Trading, Mean Reversion) with real-time backtesting.
+- **Strategy Optimization Engine**: Automated evaluation of trading models (Trend Trading, Mean Reversion) to identify market fit.
 - **Professional UI/UX**: A modern, glassmorphism-inspired dashboard featuring high-precision Plotly multi-pane charts and Klinecharts.
 - **Explainable AI (XAI)**: Understand the "why" behind every prediction with feature importance visualizations.
 - **Risk Management**: Probabilistic forecasting using Stochastic Modeling (GARCH) and Monte Carlo simulations.
@@ -37,8 +37,6 @@
 ### 2. Market Intelligence Tools
 - **Technical Indicators**: RSI, Bollinger Bands, Moving Averages, and more via `pandas-ta`.
 - **Confidence Intervals**: Shaded Plotly overlays visualizing model certainty levels.
-- **Strategy Simulator**: Comprehensive backtesting with ROI tracking, equity curves, and detailed trade logs.
-
 ---
 
 ## 🛠️ Technology Stack

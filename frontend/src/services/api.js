@@ -93,12 +93,13 @@ export const forecastApi = {
   /**
    * Train an LSTM on the provided historical series and return predicted future points or classification.
    */
-  fetchForecast: (market, horizonDays, series, predictionType = "regression", useBidirectional = true) =>
+  fetchForecast: (market, horizonDays, series, predictionType = "regression", useBidirectional = true, checkSamples = 5) =>
     post("/api/forecast/", { 
       market, 
       horizon_days: horizonDays, 
       prediction_type: predictionType,
       use_bidirectional: useBidirectional,
+      check_samples: checkSamples,
       series 
     }),
 };
@@ -112,19 +113,13 @@ export const strategyApi = {
     post("/api/strategy/best", { series }),
 };
 
-// ─── Simulator ────────────────────────────────────────────────────────────────
-export const simulatorApi = {
-  runSimulation: ({ market = "US-TEXAS", start_days_ago = 30, end_days_ago = 0, initial_capital = 10000, risk_profile = "Balanced", series = null }) =>
-    post("/api/simulate", { market, start_days_ago, end_days_ago, initial_capital, risk_profile, series }),
-};
-
 // ─── Chart (Plotly Backend) ───────────────────────────────────────────────────
 export const chartApi = {
   /**
    * Request a Plotly HTML string from the backend for the given series.
    */
-  renderChart: (series, ticker = "Market", theme = "dark", chart_type = "candlestick", indicators = null) =>
-    post("/api/chart/render", { series, ticker, theme, chart_type, indicators }),
+  renderChart: (series, ticker = "Market", theme = "dark", chart_type = "candlestick", indicators = null, vlines = null) =>
+    post("/api/chart/render", { series, ticker, theme, chart_type, indicators, vlines }),
 };
 
 // ─── Utilities ────────────────────────────────────────────────────────────────

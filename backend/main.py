@@ -10,12 +10,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Routers (will be defined in backend/app/api/routes/)
-from api.routes import market, forecast, simulator, upload, resample, strategy, chart, utilities
+from api.routes import market, forecast, upload, resample, strategy, chart, utilities
 
 app = FastAPI(
     title="Enerlytics AI Backend",
     version="0.1.0",
-    description="FastAPI service exposing market data, price forecasts, and trading‑strategy simulation endpoints."
+    description="FastAPI service exposing market data, price forecasts, and technical analysis endpoints."
 )
 
 # CORS configuration – allow the React dev server to call the API.
@@ -37,7 +37,6 @@ app.add_middleware(
 # Include routers
 app.include_router(market.router,   prefix="/api/market",    tags=["Market"])
 app.include_router(forecast.router, prefix="/api/forecast",  tags=["Forecast"])
-app.include_router(simulator.router,prefix="/api/simulate",  tags=["Simulator"])
 app.include_router(upload.router,   prefix="/api/upload",    tags=["Upload"])
 app.include_router(resample.router, prefix="/api/resample",  tags=["Resample"])
 app.include_router(strategy.router, prefix="/api/strategy",  tags=["Strategy"])

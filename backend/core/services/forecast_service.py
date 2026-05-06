@@ -99,7 +99,72 @@ def build_and_train_model(data: pd.DataFrame, prediction_type: str, use_bidirect
     print(f"Starting LSTM training for {prediction_type} ({len(X_train)} samples, 10 epochs)...")
     model.fit(X_train, y_train, epochs=10, batch_size=32, verbose=0)
     print("LSTM training complete.")
-    return model, scaler, target_scaler, features_to_use
+    
+    # Calculate training score using same logic as validation (Inverse-MAPE) for consistency
+    train_predictions = model.predict(X_train, verbose=0)
+    if prediction_type == 'classification':
+        actuals = np.argmax(y_train, axis=1)
+        preds = np.argmax(train_predictions, axis=1)
+        training_score = round(float(np.mean(actuals == preds) * 100), 1)
+    else:
+        # Inverse transform to get real price comparison
+        actual_prices = target_scaler.inverse_transform(y_train.reshape(-1, 1)).flatten()
+        pred_prices = target_scaler.inverse_transform(train_predictions.reshape(-1, 1)).flatten()
+        # Avoid division by zero
+        with np.errstate(divide='ignore', invalid='ignore'):
+            mape = np.mean(np.abs((actual_prices - pred_prices) / actual_prices))
+        training_score = round(max(0, 100 * (1 - mape)), 1)
+        
+    return model, scaler, target_scaler, features_to_use, training_score
+
+def validate_model(model, data, features, scaler, target_scaler, prediction_type, lookback=60, samples=5, start_idx=None, end_idx=None):
+    """
+    Performs a mini-backtest on historical segments to calculate a score.
+    If start_idx and end_idx are provided, it only picks samples from that specific range.
+    """
+    import random
+    s_idx = start_idx if start_idx is not None else lookback
+    e_idx = end_idx if end_idx is not None else len(data)
+    
+    if e_idx <= s_idx: return 0.0, []
+    
+    scores = []
+    details = []
+    # Pick random indices from the specified range
+    available_indices = list(range(max(lookback, s_idx), e_idx))
+    if not available_indices: return 0.0, []
+    
+    # If samples is None, take everything in the range
+    num_to_take = min(samples, len(available_indices)) if samples is not None else len(available_indices)
+    indices = random.sample(available_indices, num_to_take)
+    
+    # Sort indices so validation details are in chronological order
+    indices.sort()
+    
+    for idx in indices:
+        # Prepare input
+        input_data = data[features].iloc[idx-lookback:idx]
+        scaled_input = scaler.transform(input_data).reshape(1, lookback, len(features))
+        
+        # Predict
+        prediction = model.predict(scaled_input, verbose=0)
+        ts = data['timestamp'].iloc[idx]
+        
+        if prediction_type == 'regression':
+            actual = float(data['Close'].iloc[idx])
+            pred_val = float(target_scaler.inverse_transform(prediction.reshape(-1, 1))[0, 0])
+            error = abs(actual - pred_val) / actual
+            scores.append(max(0, 1 - error))
+            details.append({"timestamp": ts, "actual": round(actual, 2), "predicted": round(pred_val, 2)})
+        else:
+            actual = int(data['Target'].iloc[idx])
+            pred_class = int(np.argmax(prediction, axis=1)[0])
+            scores.append(1.0 if actual == pred_class else 0.0)
+            labels = {0: "DOWN", 1: "STABLE", 2: "UP"}
+            details.append({"timestamp": ts, "actual": labels.get(actual), "predicted": labels.get(pred_class)})
+            
+    avg_score = round(float(np.mean(scores) * 100), 1) if scores else 0.0
+    return avg_score, details
 
 def predict_future(model, data, features_to_use, scaler, target_scaler, prediction_type, lookback=60, future_days=30):
     last_lookback_days = data[features_to_use][-lookback:]
@@ -127,7 +192,8 @@ def generate_lstm_forecast(
     series: List[OHLCVPoint], 
     horizon_days: int = 30,
     prediction_type: str = "regression",
-    use_bidirectional: bool = True
+    use_bidirectional: bool = True,
+    check_samples: int = 5
 ) -> Dict[str, Any]:
     
     if len(series) < 61:
@@ -140,7 +206,24 @@ def generate_lstm_forecast(
         df = create_classification_labels(df)
         
     lookback = 60
-    model, scaler, target_scaler, features = build_and_train_model(df, prediction_type, use_bidirectional, lookback)
+    
+    # Split data: 90% Training, 10% Validation (Latest data, strictly unseen)
+    split_idx = int(len(df) * 0.9)
+    train_df = df.iloc[:split_idx].copy()
+    
+    # Train only on training set
+    model, scaler, target_scaler, features, training_score = build_and_train_model(train_df, prediction_type, use_bidirectional, lookback)
+    
+    # 1. Validation Score: Run on ALL points in the strictly unseen 10% (Latest data)
+    validation_score, val_details = validate_model(model, df, features, scaler, target_scaler, prediction_type, lookback, samples=None, start_idx=split_idx)
+    for d in val_details: d['type'] = 'VALIDATION'
+    
+    # 2. Check Score: Run on the user-specified number of samples from training data (Robustness check)
+    check_score, check_details = validate_model(model, df, features, scaler, target_scaler, prediction_type, lookback, samples=check_samples, start_idx=lookback, end_idx=split_idx)
+    for d in check_details: d['type'] = 'CHECK'
+    
+    # Merge details for UI
+    all_validation_details = sorted(val_details + check_details, key=lambda x: x['timestamp'])
     
     last_timestamp = pd.to_datetime(series[-1].timestamp, unit="ms", utc=True)
     
@@ -170,7 +253,11 @@ def generate_lstm_forecast(
             "market": market,
             "horizon_hours": horizon_days * 24,
             "points": [p.model_dump() for p in points],
-            "feature_importance": importance
+            "feature_importance": importance,
+            "validation_score": validation_score,
+            "check_score": check_score,
+            "training_score": training_score,
+            "validation_details": all_validation_details
         }
     else:
         pred_class = predict_future(model, df, features, scaler, target_scaler, 'classification', lookback, horizon_days)
@@ -180,5 +267,9 @@ def generate_lstm_forecast(
             "market": market,
             "horizon_hours": horizon_days * 24,
             "prediction": labels.get(pred_class, "UNKNOWN"),
-            "feature_importance": importance
+            "feature_importance": importance,
+            "validation_score": validation_score,
+            "check_score": check_score,
+            "training_score": training_score,
+            "validation_details": all_validation_details
         }

@@ -11,14 +11,15 @@ async def render_chart(
     ticker: str = Body("Market", embed=True),
     theme: str = Body("dark", embed=True),
     chart_type: str = Body("candlestick", embed=True),
-    indicators: List[str] = Body(None, embed=True)
+    indicators: List[str] = Body(None, embed=True),
+    vlines: List[Any] = Body(None, embed=True)
 ) -> Dict[str, Any]:
 
     """
     Returns a Plotly HTML string for the provided OHLCV series.
     """
     try:
-        charts = generate_plotly_chart(series, ticker, theme, chart_type, indicators)
+        charts = generate_plotly_chart(series, ticker, theme, chart_type, indicators, vlines)
         return {"charts": charts}
     except Exception as e:
 
