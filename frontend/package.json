@@ -1,0 +1,25 @@
+{
+  "name": "enerlytics-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "apexcharts": "^5.10.6",
+    "klinecharts": "^10.0.0-beta1",
+    "lucide-react": "^1.14.0",
+    "react": "^18.3.0",
+    "react-apexcharts": "^2.1.0",
+    "react-dom": "^18.3.0",
+    "recharts": "^2.12.8",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.0"
+  }
+}

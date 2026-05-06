@@ -1,0 +1,30 @@
+from fastapi import APIRouter, Body, HTTPException
+from typing import List, Dict, Any
+from core.services.forecast_service import generate_lstm_forecast
+from models.schemas import OHLCVPoint
+
+router = APIRouter()
+
+@router.post("/", response_model=Dict[str, Any])
+async def get_forecast(
+    market: str = Body("US‑TEXAS", description="Market identifier"),
+    horizon_days: int = Body(30, description="Forecast horizon in days"),
+    prediction_type: str = Body("regression", description="'regression' or 'classification'"),
+    use_bidirectional: bool = Body(True, description="Whether to use Bidirectional LSTM"),
+    series: List[OHLCVPoint] = Body(..., description="Historical OHLCV data to train LSTM")
+):
+    """
+    Return an LSTM-based price forecast trained on the provided historical series.
+    WARNING: Training occurs synchronously and may take a few seconds.
+    """
+    try:
+        return generate_lstm_forecast(
+            market=market, 
+            series=series, 
+            horizon_days=horizon_days,
+            prediction_type=prediction_type,
+            use_bidirectional=use_bidirectional
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

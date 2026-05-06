@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+python-multipart
+pandas
+openpyxl
+requests
+yfinance
+scikit-learn
+tensorflow
+pandas_ta
+plotly

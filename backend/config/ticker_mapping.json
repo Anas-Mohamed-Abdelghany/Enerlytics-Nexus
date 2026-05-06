@@ -1,0 +1,324 @@
+{
+  "Alpha Vantage": [
+    {
+      "label": "Apple",
+      "value": "AAPL"
+    },
+    {
+      "label": "Microsoft",
+      "value": "MSFT"
+    },
+    {
+      "label": "Google",
+      "value": "GOOGL"
+    },
+    {
+      "label": "Amazon",
+      "value": "AMZN"
+    },
+    {
+      "label": "Tesla",
+      "value": "TSLA"
+    },
+    {
+      "label": "Meta",
+      "value": "META"
+    },
+    {
+      "label": "NVIDIA",
+      "value": "NVDA"
+    },
+    {
+      "label": "Bitcoin",
+      "value": "BTC"
+    },
+    {
+      "label": "Ethereum",
+      "value": "ETH"
+    }
+  ],
+  "Financial Prep": [
+    {
+      "label": "Apple",
+      "value": "AAPL"
+    },
+    {
+      "label": "Microsoft",
+      "value": "MSFT"
+    },
+    {
+      "label": "Google",
+      "value": "GOOGL"
+    },
+    {
+      "label": "Amazon",
+      "value": "AMZN"
+    },
+    {
+      "label": "Tesla",
+      "value": "TSLA"
+    },
+    {
+      "label": "Meta",
+      "value": "META"
+    },
+    {
+      "label": "NVIDIA",
+      "value": "NVDA"
+    }
+  ],
+  "Polygon": [
+    {
+      "label": "Apple",
+      "value": "AAPL"
+    },
+    {
+      "label": "Microsoft",
+      "value": "MSFT"
+    },
+    {
+      "label": "Google",
+      "value": "GOOGL"
+    },
+    {
+      "label": "Amazon",
+      "value": "AMZN"
+    },
+    {
+      "label": "Tesla",
+      "value": "TSLA"
+    },
+    {
+      "label": "Meta",
+      "value": "META"
+    },
+    {
+      "label": "NVIDIA",
+      "value": "NVDA"
+    }
+  ],
+  "Twelve Data": [
+    {
+      "label": "Apple",
+      "value": "AAPL"
+    },
+    {
+      "label": "Microsoft",
+      "value": "MSFT"
+    },
+    {
+      "label": "Euro / US Dollar",
+      "value": "EUR/USD"
+    },
+    {
+      "label": "Pound / US Dollar",
+      "value": "GBP/USD"
+    },
+    {
+      "label": "US Dollar / Yen",
+      "value": "USD/JPY"
+    },
+    {
+      "label": "Bitcoin / USD",
+      "value": "BTC/USD"
+    },
+    {
+      "label": "Ethereum / USD",
+      "value": "ETH/USD"
+    }
+  ],
+  "EOD": [
+    {
+      "label": "Apple",
+      "value": "AAPL"
+    },
+    {
+      "label": "Microsoft",
+      "value": "MSFT"
+    },
+    {
+      "label": "Google",
+      "value": "GOOGL"
+    }
+  ],
+  "Ember Energy": [
+    {
+      "label": "Brazil (Energy Data)",
+      "value": "BRA"
+    },
+    {
+      "label": "Germany (Energy Data)",
+      "value": "DEU"
+    },
+    {
+      "label": "USA (Energy Data)",
+      "value": "USA"
+    }
+  ],
+  "Energi Data": [
+    {
+      "label": "Danish CO2 Emissions",
+      "value": "CO2Emis"
+    },
+    {
+      "label": "Danish Power Production",
+      "value": "DeclarationProduction"
+    },
+    {
+      "label": "Danish Spot Prices",
+      "value": "Elspotprices"
+    }
+  ],
+  "EnergypriceAPI": [
+    {
+      "label": "Brent Crude Oil",
+      "value": "BRENT"
+    },
+    {
+      "label": "WTI Crude Oil",
+      "value": "WTI"
+    },
+    {
+      "label": "Gasoline",
+      "value": "GASOLINE"
+    },
+    {
+      "label": "Natural Gas",
+      "value": "NATURALGAS"
+    }
+  ],
+  "MetalpriceAPI": [
+    {
+      "label": "Gold",
+      "value": "XAU"
+    },
+    {
+      "label": "Silver",
+      "value": "XAG"
+    },
+    {
+      "label": "Platinum",
+      "value": "XPT"
+    },
+    {
+      "label": "Palladium",
+      "value": "XPD"
+    },
+    {
+      "label": "Copper",
+      "value": "XCU"
+    },
+    {
+      "label": "Aluminium",
+      "value": "XAL"
+    },
+    {
+      "label": "Lead",
+      "value": "XPB"
+    },
+    {
+      "label": "Zinc",
+      "value": "XZN"
+    }
+  ],
+  "ForexRateAPI": [
+    {
+      "label": "Euro",
+      "value": "EUR"
+    },
+    {
+      "label": "Japanese Yen",
+      "value": "JPY"
+    },
+    {
+      "label": "British Pound",
+      "value": "GBP"
+    },
+    {
+      "label": "Indian Rupee",
+      "value": "INR"
+    },
+    {
+      "label": "UAE Dirham",
+      "value": "AED"
+    }
+  ],
+  "EIA": [
+    {
+      "label": "Crude Oil Imports (Qty)",
+      "value": "crude-oil-imports:quantity"
+    },
+    {
+      "label": "Electricity Sales (MWh)",
+      "value": "electricity/retail-sales:sales"
+    },
+    {
+      "label": "Electricity Price (Avg)",
+      "value": "electricity/retail-sales:price"
+    },
+    {
+      "label": "Electricity Revenue ($M)",
+      "value": "electricity/retail-sales:revenue"
+    },
+    {
+      "label": "Electricity Customers (Num)",
+      "value": "electricity/retail-sales:customers"
+    },
+    {
+      "label": "Net Generation (MWh)",
+      "value": "electricity/electricity-power-operational-data:generation"
+    },
+    {
+      "label": "Total Energy Consumption",
+      "value": "total-energy/data:value"
+    },
+    {
+      "label": "Natural Gas Price (Citygate)",
+      "value": "natural-gas/pri/sum:value"
+    },
+    {
+      "label": "Natural Gas Production (Wet)",
+      "value": "natural-gas/prod/wh-sum:value"
+    },
+    {
+      "label": "Natural Gas Storage (BCF)",
+      "value": "natural-gas/stor/sum:value"
+    },
+    {
+      "label": "Petroleum Production (Field)",
+      "value": "petroleum/prod/sum:value"
+    },
+    {
+      "label": "Petroleum Stocks (Total)",
+      "value": "petroleum/stoc/sum:value"
+    },
+    {
+      "label": "Coal Production (Qty)",
+      "value": "coal/production/quarterly:value"
+    },
+    {
+      "label": "Nuclear Generation (Total)",
+      "value": "nuclear/generation/data:value"
+    },
+    {
+      "label": "Renewable Generation (Total)",
+      "value": "renewable/generation/data:value"
+    },
+    {
+      "label": "Gasoline Retail Price",
+      "value": "petroleum/pri/gnd:value"
+    },
+    {
+      "label": "Diesel Retail Price",
+      "value": "petroleum/pri/gnd:value"
+    },
+    {
+      "label": "Propane Price (Avg)",
+      "value": "petroleum/pri/sum:value"
+    },
+    {
+      "label": "Heating Oil Price",
+      "value": "petroleum/pri/sum:value"
+    }
+  ]
+}
