@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Routers (will be defined in backend/app/api/routes/)
-from api.routes import market, forecast, upload, resample, strategy, chart, utilities
+from api.routes import market, forecast, upload, resample, strategy, chart, utilities, battery
 
 app = FastAPI(
     title="Enerlytics AI Backend",
@@ -42,6 +42,7 @@ app.include_router(resample.router, prefix="/api/resample",  tags=["Resample"])
 app.include_router(strategy.router, prefix="/api/strategy",  tags=["Strategy"])
 app.include_router(chart.router,    prefix="/api/chart",     tags=["Chart"])
 app.include_router(utilities.router,prefix="/api/utils",     tags=["Utilities"])
+app.include_router(battery.router,  prefix="/api/battery",   tags=["Battery"])
 
 @app.get("/", tags=["Health"])
 async def health_check() -> dict:

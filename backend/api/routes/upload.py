@@ -24,8 +24,8 @@ async def upload_file(file: UploadFile = File(...)):
     - Compute KPIs (current price, period change, volatility, row count).
     - Return a fully normalised series ready for the chart.
 
-    Required columns (case-insensitive): **date/timestamp** and **close/price**.
-    Optional columns: open, high, low, volume.
+    Required columns (case-insensitive): **date/timestamp** and **close/price/selling_price_eur_kwh**.
+    Optional columns: open, high, low, volume, battery_p, grid_p, load_p, pv_p.
     """
     # ── Validate extension ──────────────────────────────────────────────────
     filename = file.filename or "upload"
@@ -52,3 +52,22 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=422, detail=str(e))
 
     return result
+
+@router.get("/predefined", response_model=UploadResponse, summary="Load the predefined 2024 training dataset")
+async def load_predefined():
+    """
+    Loads the fixed dataset_2024.csv file from the local filesystem.
+    This avoids manual upload for the competition training phase.
+    """
+    import os
+    file_path = r"f:\projects\Enerlytics-Nexus\dataset_2024.csv"
+    
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Predefined dataset_2024.csv not found at expected location.")
+
+    try:
+        with open(file_path, "rb") as f:
+            content = f.read()
+        return parse_uploaded_file("dataset_2024.csv", content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

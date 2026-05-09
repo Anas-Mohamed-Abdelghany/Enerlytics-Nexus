@@ -11,3 +11,4 @@ scikit-learn
 tensorflow
 pandas_ta
 plotly
+shap

@@ -155,38 +155,6 @@
       "value": "USA"
     }
   ],
-  "Energi Data": [
-    {
-      "label": "Danish CO2 Emissions",
-      "value": "CO2Emis"
-    },
-    {
-      "label": "Danish Power Production",
-      "value": "DeclarationProduction"
-    },
-    {
-      "label": "Danish Spot Prices",
-      "value": "Elspotprices"
-    }
-  ],
-  "EnergypriceAPI": [
-    {
-      "label": "Brent Crude Oil",
-      "value": "BRENT"
-    },
-    {
-      "label": "WTI Crude Oil",
-      "value": "WTI"
-    },
-    {
-      "label": "Gasoline",
-      "value": "GASOLINE"
-    },
-    {
-      "label": "Natural Gas",
-      "value": "NATURALGAS"
-    }
-  ],
   "MetalpriceAPI": [
     {
       "label": "Gold",
@@ -319,6 +287,192 @@
     {
       "label": "Heating Oil Price",
       "value": "petroleum/pri/sum:value"
+    }
+  ],
+  "Oil Price API": [
+    {
+      "label": "Brent Crude Oil",
+      "value": "BRENT_CRUDE_USD"
+    },
+    {
+      "label": "WTI Crude Oil",
+      "value": "WTI_USD"
+    },
+    {
+      "label": "Dubai Crude Oil",
+      "value": "DUBAI_CRUDE_USD"
+    },
+    {
+      "label": "Tapis Crude Oil",
+      "value": "TAPIS_CRUDE_USD"
+    },
+    {
+      "label": "Urals Crude Oil",
+      "value": "URALS_CRUDE_USD"
+    },
+    {
+      "label": "Western Canadian Select (WCS)",
+      "value": "WCS_CRUDE_USD"
+    },
+    {
+      "label": "Gasoline",
+      "value": "GASOLINE_USD"
+    },
+    {
+      "label": "RBOB Gasoline",
+      "value": "GASOLINE_RBOB_USD"
+    },
+    {
+      "label": "Heating Oil",
+      "value": "HEATING_OIL_USD"
+    },
+    {
+      "label": "Diesel",
+      "value": "DIESEL_USD"
+    },
+    {
+      "label": "ULSD Diesel",
+      "value": "ULSD_DIESEL_USD"
+    },
+    {
+      "label": "Jet Fuel",
+      "value": "JET_FUEL_USD"
+    },
+    {
+      "label": "Henry Hub Natural Gas (USD)",
+      "value": "NATURAL_GAS_USD"
+    },
+    {
+      "label": "UK Natural Gas (GBP)",
+      "value": "NATURAL_GAS_GBP"
+    },
+    {
+      "label": "Dutch TTF Natural Gas (EUR)",
+      "value": "DUTCH_TTF_EUR"
+    },
+    {
+      "label": "JKM LNG (USD)",
+      "value": "JKM_LNG_USD"
+    },
+    {
+      "label": "Cushing Oil Storage",
+      "value": "CUSHING_STORAGE"
+    },
+    {
+      "label": "US Natural Gas Storage",
+      "value": "NATURAL_GAS_STORAGE"
+    },
+    {
+      "label": "US Rig Count",
+      "value": "US_RIG_COUNT"
+    },
+    {
+      "label": "Canada Rig Count",
+      "value": "CANADA_RIG_COUNT"
+    },
+    {
+      "label": "International Rig Count",
+      "value": "INTERNATIONAL_RIG_COUNT"
+    },
+    {
+      "label": "Permian Frac Spreads",
+      "value": "PERMIAN_FRAC_SPREADS"
+    },
+    {
+      "label": "Eagle Ford Frac Spreads",
+      "value": "EAGLEFORD_FRAC_SPREADS"
+    },
+    {
+      "label": "Bakken Frac Spreads",
+      "value": "BAKKEN_FRAC_SPREADS"
+    },
+    {
+      "label": "Texas Well Permits",
+      "value": "TEXAS_WELL_PERMITS"
+    },
+    {
+      "label": "North Dakota Well Permits",
+      "value": "NORTH_DAKOTA_WELL_PERMITS"
+    },
+    {
+      "label": "Oklahoma Well Permits",
+      "value": "OKLAHOMA_WELL_PERMITS"
+    },
+    {
+      "label": "Permian DUC Wells",
+      "value": "PERMIAN_DUC_WELLS"
+    },
+    {
+      "label": "Eagle Ford DUC Wells",
+      "value": "EAGLEFORD_DUC_WELLS"
+    },
+    {
+      "label": "Bakken DUC Wells",
+      "value": "BAKKEN_DUC_WELLS"
+    },
+    {
+      "label": "Marine Gas Oil (MGO)",
+      "value": "MGO_05S_USD"
+    },
+    {
+      "label": "Very Low Sulfur Fuel Oil (VLSFO)",
+      "value": "VLSFO_USD"
+    },
+    {
+      "label": "Heavy Fuel Oil (380 CST)",
+      "value": "HFO_380_USD"
+    },
+    {
+      "label": "Heavy Fuel Oil (180 CST)",
+      "value": "HFO_180_USD"
+    },
+    {
+      "label": "Central Appalachian Coal",
+      "value": "CAPP_COAL_USD"
+    },
+    {
+      "label": "Powder River Basin Coal",
+      "value": "PRB_COAL_USD"
+    },
+    {
+      "label": "Illinois Basin Coal",
+      "value": "ILLINOIS_COAL_USD"
+    },
+    {
+      "label": "Newcastle Coal (Australia)",
+      "value": "NEWCASTLE_COAL_USD"
+    },
+    {
+      "label": "Coking Coal",
+      "value": "COKING_COAL_USD"
+    },
+    {
+      "label": "CME Coal",
+      "value": "CME_COAL_USD"
+    },
+    {
+      "label": "NYMEX Appalachian Coal",
+      "value": "NYMEX_APPALACHIAN_USD"
+    },
+    {
+      "label": "NYMEX Western Rail Coal",
+      "value": "NYMEX_WESTERN_RAIL_USD"
+    },
+    {
+      "label": "Gold Spot Price",
+      "value": "GOLD_USD"
+    },
+    {
+      "label": "Ethanol",
+      "value": "ETHANOL_USD"
+    },
+    {
+      "label": "EU Carbon Allowances",
+      "value": "EU_CARBON_EUR"
+    },
+    {
+      "label": "Uranium (U3O8)",
+      "value": "URANIUM_USD"
     }
   ]
 }

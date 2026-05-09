@@ -1,61 +1,67 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { uploadApi, resampleApi, marketApi, forecastApi, strategyApi, chartApi, utilsApi } from "../../services/api";
+import { uploadApi, resampleApi, marketApi, forecastApi, strategyApi, chartApi, utilsApi, batteryApi } from "../../services/api";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 export const TIMEFRAMES = ["1W", "1M", "3M", "6M", "1Y"];
-export const INTERVALS  = ["1H", "4H", "1D", "1W", "1M"];
-export const ACCEPTED   = ".csv,.tsv,.json,.xlsx,.xls";
-export const fmtSize    = (b) => b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
+export const INTERVALS = ["1H", "4H", "1D", "1W", "1M"];
+export const ACCEPTED = ".csv,.tsv,.json,.xlsx,.xls";
+export const fmtSize = (b) => b < 1048576 ? `${(b / 1024).toFixed(1)} KB` : `${(b / 1048576).toFixed(1)} MB`;
 
 // ─── Custom Hook ──────────────────────────────────────────────────────────────
 export default function useDashboard(isDarkMode) {
   // ── Core State ──────────────────────────────────────────────────────────────
-  const [mode, setMode]               = useState(null);
-  const [fullSeries, setFullSeries]   = useState([]);
-  const [chartData, setChartData]     = useState([]);
-  const [kpis, setKpis]               = useState(null);
-  const [fileInfo, setFileInfo]       = useState(null);
-  const [timeframe, setTimeframe]     = useState("ALL");
-  const [interval, setInterval]       = useState("1D");
-  const [uploading, setUploading]     = useState(false);
-  const [resampling, setResampling]   = useState(false);
-  const [error, setError]             = useState(null);
-  const [dragOver, setDragOver]       = useState(false);
-  const fileRef                       = useRef(null);
+  const [mode, setMode] = useState(null);
+  const [isBatteryDemo, setIsBatteryDemo] = useState(false);
+  const [fullSeries, setFullSeries] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [kpis, setKpis] = useState(null);
+  const [fileInfo, setFileInfo] = useState(null);
+  const [timeframe, setTimeframe] = useState("ALL");
+  const [interval, setInterval] = useState("1D");
+  const [uploading, setUploading] = useState(false);
+  const [loadingTrain, setLoadingTrain] = useState(false);
+  const [loadingTest, setLoadingTest] = useState(false);
+  const [trainStatus, setTrainStatus] = useState("idle"); // 'idle' | 'success' | 'error'
+  const [resampling, setResampling] = useState(false);
+  const [error, setError] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef(null);
+  const trainFileRef = useRef(null);
+  const testFileRef = useRef(null);
 
   // ── API Form State ──────────────────────────────────────────────────────────
-  const [apiChoice, setApiChoice]         = useState("Alpha Vantage");
-  const [ticker, setTicker]               = useState("Apple");
-  const [tickerMap, setTickerMap]         = useState({});
-  const [startDate, setStartDate]         = useState("2023-01-01");
-  const [endDate, setEndDate]             = useState(new Date().toISOString().split('T')[0]);
+  const [apiChoice, setApiChoice] = useState("Alpha Vantage");
+  const [ticker, setTicker] = useState("Apple");
+  const [tickerMap, setTickerMap] = useState({});
+  const [startDate, setStartDate] = useState("2023-01-01");
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [fetchInterval, setFetchInterval] = useState("1D");
 
   // ── Utility Tools State ─────────────────────────────────────────────────────
   const [conversionSymbol, setConversionSymbol] = useState("EUR/USD");
   const [conversionAmount, setConversionAmount] = useState(100);
   const [conversionResult, setConversionResult] = useState(null);
-  const [isConverting, setIsConverting]         = useState(false);
+  const [isConverting, setIsConverting] = useState(false);
 
   // ── AI State ────────────────────────────────────────────────────────────────
-  const [predicting, setPredicting]             = useState(false);
-  const [analyzing, setAnalyzing]               = useState(false);
+  const [predicting, setPredicting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [predictionResult, setPredictionResult] = useState(null);
-  const [statusMessage, setStatusMessage]       = useState("System Ready — Select an AI action to begin analysis.");
-  const [predictionType, setPredictionType]     = useState("regression");
+  const [statusMessage, setStatusMessage] = useState("System Ready — Select an AI action to begin analysis.");
+  const [predictionType, setPredictionType] = useState("regression");
   const [predictionHorizon, setPredictionHorizon] = useState(30);
-  const [trainingWindow, setTrainingWindow]     = useState("3M");
-  const [useBidirectional, setUseBidirectional] = useState(true);
-  const [checkSamples, setCheckSamples]         = useState(5);
-  const [showHowItWorks, setShowHowItWorks]     = useState(false);
-  const [marketSentiment, setMarketSentiment]   = useState(null);
+  const [trainingWindow, setTrainingWindow] = useState("ALL");
+  const [architecture, setArchitecture] = useState("advanced");
+  const [checkSamples, setCheckSamples] = useState(5);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [marketSentiment, setMarketSentiment] = useState(null);
   const [selectedStrategies, setSelectedStrategies] = useState(["Trend Trading"]);
   const [showStrategyInfo, setShowStrategyInfo] = useState(false);
 
   // ── Plotly State ────────────────────────────────────────────────────────────
-  const [plotlyHtml, setPlotlyHtml]             = useState(null);
-  const [loadingChart, setLoadingChart]         = useState(false);
-  const [chartType, setChartType]               = useState("candle_solid");
+  const [plotlyHtml, setPlotlyHtml] = useState(null);
+  const [loadingChart, setLoadingChart] = useState(false);
+  const [chartType, setChartType] = useState("candle_solid");
   const [activeIndicators, setActiveIndicators] = useState(["MA", "BOLL"]);
   const [activeOscillators, setActiveOscillators] = useState([]);
 
@@ -64,8 +70,8 @@ export default function useDashboard(isDarkMode) {
   const [showRobustnessDetails, setShowRobustnessDetails] = useState(false);
 
   // ── Live Mode State ─────────────────────────────────────────────────────────
-  const [liveMode, setLiveMode]     = useState(false);
-  const [liveTimer, setLiveTimer]   = useState(null);
+  const [liveMode, setLiveMode] = useState(false);
+  const [liveTimer, setLiveTimer] = useState(null);
 
   // ── Load dynamic tickers from backend ───────────────────────────────────────
   useEffect(() => {
@@ -75,20 +81,46 @@ export default function useDashboard(isDarkMode) {
   }, []);
 
   // ── Upload ──────────────────────────────────────────────────────────────────
-  const handleFile = useCallback(async (file) => {
+  const handleFile = useCallback(async (file, type = 'test') => {
     if (!file) return;
-    setUploading(true);
-    setError(null);
-    setFullSeries([]); setChartData([]); setKpis(null); setFileInfo(null);
+    const setter = type === 'train' ? setLoadingTrain : setLoadingTest;
+    setter(true);
+    if (type === 'train') setTrainStatus("idle");
     try {
       const resp = await uploadApi.uploadFile(file);
-      setFullSeries(resp.series);
-      setChartData(resp.series);
-      setKpis(resp.kpis);
-      setFileInfo({ name: resp.filename, size: fmtSize(file.size), rows: resp.rows });
-      setTimeframe("ALL"); setInterval("1D");
-    } catch (e) { setError(e.message); }
-    finally { setUploading(false); }
+      if (type === 'test') {
+        setFullSeries(resp.series || []);
+        setChartData(resp.series || []);
+        setKpis(resp.kpis || null);
+        setFileInfo({ name: resp.filename, size: fmtSize(file.size), rows: resp.rows || 0 });
+        setTimeframe("ALL"); setInterval("1D");
+      } else {
+        setTrainStatus("success");
+        setStatusMessage(`Training data [${resp.filename}] ingested successfully. ${resp.rows} samples ready.`);
+      }
+    } catch (e) { 
+      console.error("Upload error:", e);
+      setError(e.message); 
+      if (type === 'train') setTrainStatus("error");
+    }
+    finally { setter(false); }
+  }, []);
+
+  const handleUseSavedTrain = useCallback(async () => {
+    setLoadingTrain(true);
+    setTrainStatus("idle");
+    setError(null);
+    try {
+      const resp = await uploadApi.loadPredefined();
+      setTrainStatus("success");
+      setStatusMessage(`Predefined training data [${resp.filename}] loaded from local disk. ${resp.rows} samples ready for model tuning.`);
+    } catch (e) {
+      console.error("Predefined load error:", e);
+      setTrainStatus("error");
+      setError(`Failed to load saved dataset: ${e.message}`);
+    } finally {
+      setLoadingTrain(false);
+    }
   }, []);
 
   // ── API Fetch ───────────────────────────────────────────────────────────────
@@ -104,25 +136,26 @@ export default function useDashboard(isDarkMode) {
     if (liveMode) setEndDate(currentEnd);
 
     try {
-      const resp = await marketApi.fetchData(apiChoice, ticker, startDate, currentEnd);
-      setFullSeries(resp.series);
-      setFileInfo({ name: resp.filename, size: "API", rows: resp.rows });
+      const resp = await marketApi.fetchData(apiChoice, ticker, startDate, currentEnd, fetchInterval);
+      const series = resp.series || [];
+      setFullSeries(series);
+      setFileInfo({ name: resp.filename, size: "API", rows: resp.rows || 0 });
       setTimeframe("ALL");
 
       if (fetchInterval !== "1D") {
         setInterval(fetchInterval);
         setResampling(true);
         try {
-          const resampleResp = await resampleApi.resample(resp.series, "ALL", fetchInterval);
-          setChartData(resampleResp.series);
-          setKpis(resampleResp.kpis);
+          const resampleResp = await resampleApi.resample(series, "ALL", fetchInterval);
+          setChartData(resampleResp.series || []);
+          setKpis(resampleResp.kpis || null);
         } finally {
           setResampling(false);
         }
       } else {
         setInterval("1D");
-        setChartData(resp.series);
-        setKpis(resp.kpis);
+        setChartData(series);
+        setKpis(resp.kpis || null);
       }
     } catch (e) { setError(e.message); }
     finally { setUploading(false); }
@@ -167,19 +200,19 @@ export default function useDashboard(isDarkMode) {
     setResampling(true); setError(null);
     try {
       const resp = await resampleApi.resample(series, tf, iv);
-      setChartData(resp.series); setKpis(resp.kpis);
+      setChartData(resp.series || []); setKpis(resp.kpis || null);
     } catch (e) { setError(e.message); }
     finally { setResampling(false); }
   }, []);
 
   const changeTimeframe = (tf) => { setTimeframe(tf); applyResample(tf, interval, fullSeries); };
-  const changeInterval  = (iv) => { setInterval(iv); applyResample(timeframe, iv, fullSeries); };
+  const changeInterval = (iv) => { setInterval(iv); applyResample(timeframe, iv, fullSeries); };
 
   // ── AI Prediction ───────────────────────────────────────────────────────────
   const handlePredict = useCallback(async () => {
     if (!fullSeries.length) return;
     setPredicting(true); setError(null);
-    setStatusMessage(`Training LSTM ${predictionType} model with ${trainingWindow} of data...`);
+    setStatusMessage(`Training ${architecture === "pretrained" ? "Pretrained" : architecture.toUpperCase() + " LSTM"} ${predictionType} model with ${trainingWindow} of data...`);
     try {
       const windowMap = { "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "2Y": 730, "3Y": 1095, "ALL": fullSeries.length };
       const daysToKeep = windowMap[trainingWindow] || fullSeries.length;
@@ -189,15 +222,56 @@ export default function useDashboard(isDarkMode) {
         throw new Error(`Insufficient data for ${trainingWindow} training. Need at least 61 points, found ${trainingData.length}.`);
       }
 
-      const resp = await forecastApi.fetchForecast(
+      let resp;
+      if (predictionHorizon === "Audit") {
+        resp = await batteryApi.audit(); // Calls the /audit endpoint we created
+        // Map audit results to a format the UI expects if necessary
+        setStatusMessage("Official 2025 Audit for April and September complete. Displaying Scorecard...");
+        setPredictionResult({ ...resp, is_audit: true });
+        setPredicting(false);
+        return;
+      }
+
+      resp = await forecastApi.fetchForecast(
         ticker || "Market",
         predictionHorizon,
         trainingData,
         predictionType,
-        useBidirectional,
+        architecture,
         checkSamples
       );
-      setPredictionResult(resp);
+      
+      let finalResult = { ...resp };
+
+      // If in Advanced mode OR Battery Demo mode, also run the Battery Optimizer automatically
+      if ((architecture === "advanced" || isBatteryDemo) && resp.points) {
+        setStatusMessage("Price forecast ready. Running vectorized LP battery optimizer...");
+        
+        // Calculate average load/solar from uploaded data for a more realistic simulation
+        const validLoad = chartData.filter(p => p.load_p != null).map(p => p.load_p);
+        const validSolar = chartData.filter(p => p.pv_p != null).map(p => p.pv_p);
+        
+        const avgLoad = validLoad.length > 0 ? (validLoad.reduce((a,b) => a+b, 0) / validLoad.length) : 2.0;
+        const avgSolar = validSolar.length > 0 ? (validSolar.reduce((a,b) => a+b, 0) / validSolar.length) : 1.5;
+
+        const mockLoad = Array(resp.points.length).fill(avgLoad);
+        const mockSolar = Array(resp.points.length).fill(avgSolar);
+        try {
+          const optResp = await batteryApi.optimize({
+            price_forecast: resp.points.map(p => p.forecast),
+            load_forecast: mockLoad,
+            solar_forecast: mockSolar,
+            soc_init: 0.5
+          });
+          finalResult.optimizer = optResp;
+          finalResult.load_forecast = mockLoad;
+          finalResult.solar_forecast = mockSolar;
+        } catch (optErr) {
+          console.error("Optimization failed:", optErr);
+        }
+      }
+
+      setPredictionResult(finalResult);
 
       if (resp.type === "classification") {
         setStatusMessage(`AI Directional Forecast: ${resp.prediction.toUpperCase()}`);
@@ -227,7 +301,7 @@ export default function useDashboard(isDarkMode) {
       setStatusMessage(`Error: ${e.message}`);
     }
     finally { setPredicting(false); }
-  }, [chartData, fullSeries, predictionType, useBidirectional, trainingWindow, predictionHorizon, ticker, checkSamples]);
+  }, [chartData, fullSeries, predictionType, architecture, trainingWindow, predictionHorizon, ticker, checkSamples]);
 
   // ── AI Strategy Analysis ────────────────────────────────────────────────────
   const handleStrategy = useCallback(async (manualStrategy = null) => {
@@ -290,8 +364,37 @@ export default function useDashboard(isDarkMode) {
     setActiveOscillators([]);
   };
 
+  // ── CSV Export ─────────────────────────────────────────────────────────────
+  const handleDownloadCSV = useCallback((data, filename = "enerlytics_data.csv") => {
+    if (!data || data.length === 0) return;
+    
+    // Get headers from first object
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+      headers.join(","),
+      ...data.map(row => headers.map(fieldName => {
+        let val = row[fieldName];
+        // Handle dates
+        if (fieldName === "timestamp" || fieldName === "date") {
+          return val instanceof Date ? val.toISOString() : new Date(val).toISOString();
+        }
+        return val;
+      }).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
   // ── Chart Handlers ──────────────────────────────────────────────────────────
-  const handleChartTypeChange  = (type) => setChartType(type);
+  const handleChartTypeChange = (type) => setChartType(type);
   const handleAddMainIndicator = (name) => {
     setActiveIndicators(prev => prev.includes(name) ? prev.filter(i => i !== name) : [...prev, name]);
   };
@@ -319,13 +422,28 @@ export default function useDashboard(isDarkMode) {
     } else {
       setFetchInterval("1D");
     }
+
+    if (["Oil Price API", "MetalpriceAPI"].includes(apiChoice)) {
+      const end = new Date().toISOString().split('T')[0];
+      const start = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      setStartDate(start);
+      setEndDate(end);
+    }
+
+    if (apiChoice === "ForexRateAPI") {
+      const end = new Date().toISOString().split('T')[0];
+      const start = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      setStartDate(start);
+      setEndDate(end);
+    }
+
     const available = tickerMap[apiChoice];
     if (available && available.length > 0) {
       setTicker(available[0].value);
     } else {
       setTicker("");
     }
-  }, [apiChoice, tickerMap]);
+  }, [apiChoice, tickerMap, setFetchInterval, setStartDate, setEndDate, setTicker]);
 
   // ── Return everything ───────────────────────────────────────────────────────
   return {
@@ -349,7 +467,7 @@ export default function useDashboard(isDarkMode) {
     statusMessage, predictionType, setPredictionType,
     predictionHorizon, setPredictionHorizon,
     trainingWindow, setTrainingWindow,
-    useBidirectional, setUseBidirectional,
+    architecture, setArchitecture,
     checkSamples, setCheckSamples,
     showHowItWorks, setShowHowItWorks,
     marketSentiment,
@@ -370,8 +488,18 @@ export default function useDashboard(isDarkMode) {
     // Handlers
     handleFile, handleApiFetch, handlePredict, handleStrategy,
     handleBacktest, handleConvert, handleChartTypeChange,
+    handleDownloadCSV,
     handleAddMainIndicator, handleAddSubIndicator,
     changeTimeframe, changeInterval,
+    isBatteryDemo, setIsBatteryDemo,
     onFileChange, onDrop, reset,
+    
+    // Dual Upload Refs & Handlers
+    trainFileRef, testFileRef,
+    handleTrainFile: (file) => handleFile(file, 'train'),
+    handleTestFile: (file) => handleFile(file, 'test'),
+    handleUseSavedTrain,
+    loadingTrain, loadingTest,
+    trainStatus,
   };
 }

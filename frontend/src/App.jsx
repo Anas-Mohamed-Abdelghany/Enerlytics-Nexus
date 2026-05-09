@@ -30,16 +30,9 @@ export default function App() {
         </button>
       </header>
 
-      {/* Main Content Grid */}
-      <main className="main-content">
-        <div className="dashboard-grid">
-          {/* Historical Data takes full width on top */}
-          <div className="full-width">
-            <Dashboard isDarkMode={isDarkMode} />
-          </div>
-
-
-        </div>
+      {/* Main Content Area */}
+      <main className="main-content-fluid">
+        <Dashboard isDarkMode={isDarkMode} />
       </main>
     </div>
   );

@@ -1,7 +1,8 @@
 import React from "react";
 import {
   Activity, TrendingUp, TrendingDown, Zap, Calendar, Clock,
-  RotateCcw, Loader, Maximize2, CheckCircle, AlertTriangle
+  RotateCcw, Loader, Maximize2, CheckCircle, AlertTriangle,
+  Download
 } from "lucide-react";
 import ChartToolbar from "./TradingChart/ChartToolbar";
 import { s } from "./DashboardStyles";
@@ -13,6 +14,7 @@ export default function ChartView({
   liveMode, setLiveMode,
   changeTimeframe, changeInterval,
   handleChartTypeChange, handleAddMainIndicator, handleAddSubIndicator,
+  handleDownloadCSV,
   activeIndicators, activeOscillators, reset
 }) {
   return (
@@ -23,8 +25,14 @@ export default function ChartView({
           <Activity size={24} color="var(--accent-primary)" />
           Market Overview
         </h2>
-        <div style={s.pill} className="icon-pill" onClick={reset}>
-          <RotateCcw size={14} /><span>Change Source</span>
+        <div style={{ display: "flex", gap: "0.75rem" }}>
+          <div style={{ ...s.pill, background: "rgba(34, 197, 94, 0.1)", color: "#16a34a", borderColor: "rgba(34, 197, 94, 0.2)" }} 
+               className="icon-pill" onClick={() => handleDownloadCSV(chartData, "market_data.csv")}>
+            <Download size={14} /><span>Save CSV</span>
+          </div>
+          <div style={s.pill} className="icon-pill" onClick={reset}>
+            <RotateCcw size={14} /><span>Change Source</span>
+          </div>
         </div>
       </div>
 

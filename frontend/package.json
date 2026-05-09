@@ -12,9 +12,11 @@
     "apexcharts": "^5.10.6",
     "klinecharts": "^10.0.0-beta1",
     "lucide-react": "^1.14.0",
+    "plotly.js-dist-min": "^3.5.1",
     "react": "^18.3.0",
     "react-apexcharts": "^2.1.0",
     "react-dom": "^18.3.0",
+    "react-plotly.js": "^2.6.0",
     "recharts": "^2.12.8",
     "xlsx": "^0.18.5"
   },

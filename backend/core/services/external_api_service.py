@@ -35,7 +35,7 @@ def _load_ticker_map():
 _TICKER_MAP = _load_ticker_map()
 
 def get_ticker_mapping():
-    return _TICKER_MAP
+    return _load_ticker_map()
 
 # Priority: Environment Var > JSON Config > Hardcoded Fallback
 ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_API_KEY", _CONFIG.get("ALPHA_VANTAGE_API_KEY", "05ZYZ70H6F5L9II9"))
@@ -44,9 +44,9 @@ POLYGON_API_KEY = os.getenv("POLYGON_API_KEY", _CONFIG.get("POLYGON_API_KEY", "0
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY", _CONFIG.get("TWELVE_DATA_API_KEY", "ff69818c7b134877abcf08807de4367c"))
 EOD_API_KEY = os.getenv("EOD_API_KEY", _CONFIG.get("EOD_API_KEY", "68457dd194b332.71068275"))
 EMBER_API_KEY = os.getenv("EMBER_API_KEY", _CONFIG.get("EMBER_API_KEY", "ee854030-06e0-fae3-726a-0cfb7d66c08b"))
-ENERGY_PRICE_API_KEY = os.getenv("ENERGY_PRICE_API_KEY", _CONFIG.get("ENERGY_PRICE_API_KEY", "cc367b72778d688434fd127515007a08"))
 METAL_PRICE_API_KEY = os.getenv("METAL_PRICE_API_KEY", _CONFIG.get("METAL_PRICE_API_KEY", "8267fd1602aeb2a9f412fcf2729e4daa"))
 FOREX_RATE_API_KEY = os.getenv("FOREX_RATE_API_KEY", _CONFIG.get("FOREX_RATE_API_KEY", "e39dc69cf0e81ca185b1b52732f76ad3"))
+OIL_PRICE_API_KEY = os.getenv("OIL_PRICE_API_KEY", _CONFIG.get("OIL_PRICE_API_KEY", ""))
 EIA_API_KEY = os.getenv("EIA_API_KEY", _CONFIG.get("EIA_API_KEY", ""))
 
 def fetch_alpha_vantage(ticker: str, start_date: str, end_date: str, api_key: str = None) -> UploadResponse:
@@ -141,16 +141,27 @@ def fetch_eod(ticker: str, start_date: str, end_date: str, api_key: str = None) 
     series = _normalise_df(df)
     return UploadResponse(filename=f"{ticker}_EOD", rows=len(series), series=series, kpis=_compute_kpis(series))
 
-def fetch_ember(entity_code: str, start_date: str, end_date: str, api_key: str = None) -> UploadResponse:
+def fetch_ember(entity_code: str, start_date: str, end_date: str, interval: str = "1D", api_key: str = None) -> UploadResponse:
     key = api_key or EMBER_API_KEY
     if not key: raise Exception("Ember API Key is missing. Please add it to config/api_keys.json")
     
-    start_year = start_date[:4]
-    end_year = end_date[:4]
+    # Map interval to Ember endpoint
+    # Ember usually supports 'yearly' and 'monthly'
+    endpoint = "yearly"
+    if interval == "1M":
+        endpoint = "monthly"
     
-    url = f"https://api.ember-energy.org/v1/electricity-generation/yearly?entity_code={entity_code}&start_date={start_year}&end_date={end_year}&api_key={key}"
+    # Dates: Yearly expects YYYY, Monthly expects YYYY-MM
+    if endpoint == "yearly":
+        start_val = start_date[:4]
+        end_val = end_date[:4]
+    else:
+        start_val = start_date[:7]
+        end_val = end_date[:7]
     
-    response = requests.get(url)
+    url = f"https://api.ember-energy.org/v1/electricity-generation/{endpoint}?entity_code={entity_code}&start_date={start_val}&end_date={end_val}&api_key={key}"
+    
+    response = requests.get(url, timeout=25)
     if response.status_code != 200:
         raise Exception(f"Ember API Error: {response.status_code} - {response.text}")
         
@@ -160,7 +171,7 @@ def fetch_ember(entity_code: str, start_date: str, end_date: str, api_key: str =
         raise Exception(f"No Ember data found for {entity_code} in the specified range.")
         
     df = pd.DataFrame(data)
-    df['timestamp'] = pd.to_datetime(df['date'], format='%Y')
+    df['timestamp'] = pd.to_datetime(df['date'])
     
     # Ember data provides multiple series (fuel types) per year.
     # We aggregate to get the Total Generation (TWh) per year.
@@ -174,44 +185,6 @@ def fetch_ember(entity_code: str, start_date: str, end_date: str, api_key: str =
     series = _normalise_df(agg_df)
     return UploadResponse(filename=f"{entity_code}_Ember_Generation", rows=len(series), series=series, kpis=_compute_kpis(series))
 
-def fetch_energi_data_service(dataset: str, start_date: str, end_date: str) -> UploadResponse:
-    url = f"https://api.energidataservice.dk/dataset/{dataset}?start={start_date}&end={end_date}&limit=5000"
-    
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception(f"Energi Data Service Error: {response.status_code}")
-        
-    records = response.json().get('records', [])
-    if not records:
-        raise Exception(f"No records found for dataset {dataset} in range {start_date} to {end_date}")
-        
-    df = pd.DataFrame(records)
-    
-    # Robust column identification
-    time_col = next((c for c in df.columns if 'UTC' in c or 'DK' in c or 'date' in c.lower()), None)
-    if not time_col: raise Exception("Timestamp column not found in dataset")
-    df['timestamp'] = pd.to_datetime(df[time_col])
-    
-    # Identify value column (skip time, strings like PriceArea)
-    val_col = None
-    for c in df.columns:
-        if c == 'timestamp' or c == time_col or 'Area' in c or 'Code' in c: continue
-        try:
-            df[c] = pd.to_numeric(df[c])
-            val_col = c
-            break
-        except: continue
-        
-    if not val_col: raise Exception("Numeric data column not found in dataset")
-    
-    df.rename(columns={val_col: 'close'}, inplace=True)
-    df['open'] = df['close']
-    df['high'] = df['close']
-    df['low'] = df['close']
-    df['volume'] = 0
-    
-    series = _normalise_df(df)
-    return UploadResponse(filename=f"{dataset}_EnergiDK", rows=len(series), series=series, kpis=_compute_kpis(series))
 
 # ── Twelve Data Utilities ───────────────────────────────────────────────────
 def get_twelve_data_exchange_rate(symbol: str, api_key: str = None) -> dict:
@@ -230,63 +203,57 @@ def get_twelve_data_currency_conversion(symbol: str, amount: float, api_key: str
     if response.status_code != 200: raise Exception(f"Conversion Error: {response.status_code}")
     return response.json()
 
-def fetch_energy_price_api(symbol: str, start_date: str, end_date: str, api_key: str = None) -> UploadResponse:
-    key = api_key or ENERGY_PRICE_API_KEY
-    if not key: raise Exception("EnergypriceAPI Key is missing.")
-    
-    url = f"https://api.energypriceapi.com/v1/timeframe?api_key={key}&start_date={start_date}&end_date={end_date}&base=USD&currencies={symbol}"
-    
-    response = requests.get(url)
-    if response.status_code != 200: raise Exception(f"EnergypriceAPI HTTP Error: {response.status_code}")
-    
-    res_json = response.json()
-    if not res_json.get('success'):
-        error_info = res_json.get('error', {}).get('info', 'Unknown error')
-        raise Exception(f"EnergypriceAPI API Error: {error_info}")
-        
-    rates = res_json.get('rates', {})
-    if not rates: raise Exception(f"No rates found for {symbol} in the given timeframe.")
-    
-    data_list = []
-    for date_str, symbol_rates in rates.items():
-        rate_val = symbol_rates.get(symbol)
-        if rate_val and rate_val > 0:
-            price_usd = 1.0 / rate_val
-            data_list.append({
-                "timestamp": date_str, "open": price_usd, "high": price_usd, "low": price_usd, "close": price_usd, "volume": 0
-            })
-            
-    if not data_list: raise Exception(f"No valid price points for {symbol}")
-    
-    df = pd.DataFrame(data_list)
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    df.sort_values('timestamp', inplace=True)
-    
-    series = _normalise_df(df)
-    return UploadResponse(filename=f"{symbol}_EnergyPrice", rows=len(series), series=series, kpis=_compute_kpis(series))
 
 def fetch_metal_price_api(symbol: str, start_date: str, end_date: str, api_key: str = None) -> UploadResponse:
     key = api_key or METAL_PRICE_API_KEY
     if not key: raise Exception("MetalpriceAPI Key is missing.")
     
+    # Some versions of MetalpriceAPI prefer 'currencies' over 'symbols'
     url = f"https://api.metalpriceapi.com/v1/timeframe?api_key={key}&start_date={start_date}&end_date={end_date}&base=USD&currencies={symbol}"
     
-    response = requests.get(url)
+    response = requests.get(url, timeout=25)
     if response.status_code != 200: raise Exception(f"MetalpriceAPI HTTP Error: {response.status_code}")
     
     res_json = response.json()
     if not res_json.get('success'):
-        error_info = res_json.get('error', {}).get('info', 'Unknown error')
-        raise Exception(f"MetalpriceAPI API Error: {error_info}")
+        error_obj = res_json.get('error', {})
+        error_msg = error_obj.get('info') or error_obj.get('message') or res_json.get('message') or "Unknown error"
+        raise Exception(f"MetalpriceAPI API Error: {error_msg}")
         
-    rates = res_json.get('rates', {})
+    rates = res_json.get('rates', [])
     if not rates: raise Exception(f"No rates found for {symbol} in the given timeframe.")
     
     data_list = []
-    for date_str, symbol_rates in rates.items():
-        rate_val = symbol_rates.get(symbol)
-        if rate_val and rate_val > 0:
-            price_usd = 1.0 / rate_val
+    
+    # MetalpriceAPI can return rates as a list or a dictionary
+    if isinstance(rates, list):
+        for item in rates:
+            ts = item.get('timestamp') or item.get('date')
+            symbol_rates = item.get('rates', {})
+            
+            # Prefer direct price (e.g. USDXAU) if available, otherwise use 1/XAU
+            direct_key = f"USD{symbol}"
+            if direct_key in symbol_rates:
+                price_usd = float(symbol_rates[direct_key])
+            elif symbol in symbol_rates and float(symbol_rates[symbol]) > 0:
+                price_usd = 1.0 / float(symbol_rates[symbol])
+            else:
+                continue
+                
+            data_list.append({
+                "timestamp": ts, "open": price_usd, "high": price_usd, "low": price_usd, "close": price_usd, "volume": 0
+            })
+    else:
+        # Dict format: { "YYYY-MM-DD": { "XAU": ... } }
+        for date_str, symbol_rates in rates.items():
+            direct_key = f"USD{symbol}"
+            if direct_key in symbol_rates:
+                price_usd = float(symbol_rates[direct_key])
+            elif symbol in symbol_rates and float(symbol_rates[symbol]) > 0:
+                price_usd = 1.0 / float(symbol_rates[symbol])
+            else:
+                continue
+                
             data_list.append({
                 "timestamp": date_str, "open": price_usd, "high": price_usd, "low": price_usd, "close": price_usd, "volume": 0
             })
@@ -304,28 +271,56 @@ def fetch_forex_rate_api(symbol: str, start_date: str, end_date: str, api_key: s
     key = api_key or FOREX_RATE_API_KEY
     if not key: raise Exception("ForexRateAPI Key is missing.")
     
-    url = f"https://api.forexrateapi.com/v1/timeframe?api_key={key}&start_date={start_date}&end_date={end_date}&base=USD&currencies={symbol}"
+    # The timeframe endpoint requires 'currency' for single currency requests
+    url = f"https://api.forexrateapi.com/v1/timeframe?api_key={key}&start_date={start_date}&end_date={end_date}&base=USD&currency={symbol}"
     
-    response = requests.get(url)
+    response = requests.get(url, timeout=25)
     if response.status_code != 200: raise Exception(f"ForexRateAPI HTTP Error: {response.status_code}")
     
     res_json = response.json()
     if not res_json.get('success'):
-        error_info = res_json.get('error', {}).get('info', 'Unknown error')
-        raise Exception(f"ForexRateAPI API Error: {error_info}")
+        error_obj = res_json.get('error', {})
+        error_msg = error_obj.get('info') or error_obj.get('message') or res_json.get('message') or "Unknown error"
+        raise Exception(f"ForexRateAPI API Error: {error_msg}")
         
-    rates = res_json.get('rates', {})
+    rates = res_json.get('rates', [])
     if not rates: raise Exception(f"No rates found for {symbol} in the given timeframe.")
     
     data_list = []
-    for date_str, symbol_rates in rates.items():
-        rate_val = symbol_rates.get(symbol)
-        if rate_val and rate_val > 0:
-            price_usd = 1.0 / rate_val
+    
+    # ForexRateAPI can return rates as a list or a dictionary
+    if isinstance(rates, list):
+        for item in rates:
+            ts = item.get('timestamp') or item.get('date')
+            symbol_rates = item.get('rates', {})
+            
+            # Prefer direct price (e.g. USDJPY) if available, otherwise use 1/JPY
+            direct_key = f"USD{symbol}"
+            if direct_key in symbol_rates:
+                price_usd = float(symbol_rates[direct_key])
+            elif symbol in symbol_rates and float(symbol_rates[symbol]) > 0:
+                price_usd = 1.0 / float(symbol_rates[symbol])
+            else:
+                continue
+                
+            data_list.append({
+                "timestamp": ts, "open": price_usd, "high": price_usd, "low": price_usd, "close": price_usd, "volume": 0
+            })
+    else:
+        # Dict format: { "YYYY-MM-DD": { "JPY": ... } }
+        for date_str, symbol_rates in rates.items():
+            direct_key = f"USD{symbol}"
+            if direct_key in symbol_rates:
+                price_usd = float(symbol_rates[direct_key])
+            elif symbol in symbol_rates and float(symbol_rates[symbol]) > 0:
+                price_usd = 1.0 / float(symbol_rates[symbol])
+            else:
+                continue
+                
             data_list.append({
                 "timestamp": date_str, "open": price_usd, "high": price_usd, "low": price_usd, "close": price_usd, "volume": 0
             })
-            
+    
     if not data_list: raise Exception(f"No valid price points for {symbol}")
     
     df = pd.DataFrame(data_list)
@@ -335,7 +330,68 @@ def fetch_forex_rate_api(symbol: str, start_date: str, end_date: str, api_key: s
     series = _normalise_df(df)
     return UploadResponse(filename=f"{symbol}_ForexRate", rows=len(series), series=series, kpis=_compute_kpis(series))
 
-def fetch_eia(dataset_info: str, start_date: str, end_date: str, api_key: str = None) -> UploadResponse:
+def fetch_oil_price_api(ticker: str, start_date: str, end_date: str, api_key: str = None) -> UploadResponse:
+    key = api_key or OIL_PRICE_API_KEY
+    if not key: raise Exception("Oil Price API Key is missing. Please add it to config/api_keys.json")
+    
+    # Use past_month for daily data within 30 days
+    url = f"https://api.oilpriceapi.com/v1/prices/past_month?by_code={ticker}"
+    
+    headers = {"Authorization": f"Token {key}"}
+    response = requests.get(url, headers=headers, timeout=25)
+    
+    if response.status_code != 200:
+        raise Exception(f"Oil Price API Error: {response.status_code} - {response.text}")
+        
+    res_json = response.json()
+    if res_json.get('status') != 'success':
+        raise Exception(f"Oil Price API Error: {res_json.get('message', 'Unknown error')}")
+        
+    data = res_json.get('data')
+    if not data:
+        raise Exception(f"No Oil Price data found for {ticker}.")
+        
+    # If data is a dict containing a list (e.g. {'prices': [...]}), extract the list
+    if isinstance(data, dict) and 'prices' in data:
+        data = data['prices']
+    elif isinstance(data, dict):
+        data = [data] # Handle single object response (like /latest)
+        
+    df = pd.DataFrame(data)
+    if df.empty:
+        raise Exception(f"Oil Price API returned an empty data list for {ticker}.")
+        
+    # Find time column
+    time_col = next((c for c in df.columns if c in ['created_at', 'date', 'timestamp', 'time']), None)
+    if not time_col:
+        raise Exception(f"Could not find a timestamp column in Oil Price API response. Columns: {list(df.columns)}")
+        
+    df['timestamp'] = pd.to_datetime(df[time_col], utc=True).dt.tz_localize(None)
+    
+    # Find price column
+    price_col = next((c for c in df.columns if c in ['price', 'value', 'close']), None)
+    if not price_col:
+        raise Exception(f"Could not find a price column in Oil Price API response. Columns: {list(df.columns)}")
+        
+    df.rename(columns={price_col: 'close'}, inplace=True)
+    df['open'] = df['close']
+    df['high'] = df['close']
+    df['low'] = df['close']
+    df['volume'] = 0
+    
+    # Filter by user range
+    filtered_df = df[(df['timestamp'] >= pd.to_datetime(start_date)) & (df['timestamp'] <= pd.to_datetime(end_date))]
+    
+    if not filtered_df.empty:
+        df = filtered_df
+    # Else: return everything the API gave us (fallback for 30-day trial limit)
+
+    
+    df.sort_values('timestamp', inplace=True)
+    series = _normalise_df(df)
+    return UploadResponse(filename=f"{ticker}_OilPrice", rows=len(series), series=series, kpis=_compute_kpis(series))
+
+def fetch_eia(dataset_info: str, start_date: str, end_date: str, interval: str = "1D", api_key: str = None) -> UploadResponse:
     # Reload config to pick up new keys dynamically
     config = _load_config()
     key = api_key or os.getenv("EIA_API_KEY", config.get("EIA_API_KEY", ""))
@@ -352,12 +408,20 @@ def fetch_eia(dataset_info: str, start_date: str, end_date: str, api_key: str = 
 
     # Map interval to EIA frequency
     freq = "annual"
-    try:
-        delta = pd.to_datetime(end_date) - pd.to_datetime(start_date)
-        if delta.days < 730:
-            freq = "monthly"
-    except:
-        pass
+    if interval == "1M":
+        freq = "monthly"
+    elif interval == "1W":
+        freq = "weekly"
+    elif interval == "1D":
+        freq = "daily"
+    else:
+        # Fallback to auto-detection if unknown interval
+        try:
+            delta = pd.to_datetime(end_date) - pd.to_datetime(start_date)
+            if delta.days < 730:
+                freq = "monthly"
+        except:
+            pass
         
     # EIA v2 Date Formatting: 
     # Annual: YYYY, Monthly: YYYY-MM
@@ -370,7 +434,7 @@ def fetch_eia(dataset_info: str, start_date: str, end_date: str, api_key: str = 
     
     url = f"https://api.eia.gov/v2/{dataset}/data/?frequency={freq}&data[0]={data_col}&start={start_val}&end={end_val}&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=5000&api_key={key}"
     
-    response = requests.get(url)
+    response = requests.get(url, timeout=25)
     if response.status_code == 403:
         raise Exception("EIA API: 403 Forbidden. Your API Key might be invalid or restricted.")
     if response.status_code != 200:
@@ -398,7 +462,7 @@ def fetch_eia(dataset_info: str, start_date: str, end_date: str, api_key: str = 
     series = _normalise_df(agg_df)
     return UploadResponse(filename=f"{dataset.replace('/', '_')}_EIA", rows=len(series), series=series, kpis=_compute_kpis(series))
 
-def fetch_external_stock_data(api_choice: str, ticker: str, start_date: str, end_date: str, api_key: Optional[str] = None) -> UploadResponse:
+def fetch_external_stock_data(api_choice: str, ticker: str, start_date: str, end_date: str, interval: str = "1D", api_key: Optional[str] = None) -> UploadResponse:
     # Resolve ticker name from the specific API's list
     # e.g., if api_choice is 'EnergypriceAPI' and ticker is 'Brent Crude Oil', resolve to 'BRENT'
     provider_tickers = _TICKER_MAP.get(api_choice, [])
@@ -420,16 +484,14 @@ def fetch_external_stock_data(api_choice: str, ticker: str, start_date: str, end
     elif "eod" in api_choice:
         return fetch_eod(ticker, start_date, end_date, api_key)
     elif "ember" in api_choice:
-        return fetch_ember(ticker, start_date, end_date, api_key)
-    elif "energi" in api_choice:
-        return fetch_energi_data_service(ticker, start_date, end_date)
-    elif "energyprice" in api_choice:
-        return fetch_energy_price_api(ticker, start_date, end_date, api_key)
+        return fetch_ember(ticker, start_date, end_date, interval, api_key)
     elif "metalprice" in api_choice:
         return fetch_metal_price_api(ticker, start_date, end_date, api_key)
     elif "forexrate" in api_choice:
         return fetch_forex_rate_api(ticker, start_date, end_date, api_key)
     elif "eia" in api_choice:
-        return fetch_eia(ticker, start_date, end_date, api_key)
+        return fetch_eia(ticker, start_date, end_date, interval, api_key)
+    elif "oil price" in api_choice.lower():
+        return fetch_oil_price_api(ticker, start_date, end_date, api_key)
     else:
         raise ValueError(f"Unknown API choice: {api_choice}")

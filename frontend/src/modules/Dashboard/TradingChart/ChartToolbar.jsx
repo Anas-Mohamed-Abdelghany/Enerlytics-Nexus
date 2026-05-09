@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Settings2, Activity, PenTool, X, ChevronDown } from 'lucide-react';
-import { CHART_TYPES, INDICATORS, OSCILLATORS, DRAWING_TOOLS } from './chartTypes';
+import { Settings2, Activity, ChevronDown } from 'lucide-react';
+import { CHART_TYPES, INDICATORS, OSCILLATORS } from './chartTypes';
 
 export default function ChartToolbar({
   onChartTypeChange,
@@ -10,6 +10,10 @@ export default function ChartToolbar({
   onClearDrawings,
   activeIndicators,
   activeOscillators,
+  timeframe,
+  interval,
+  onTimeframeChange,
+  onIntervalChange
 }) {
   const [openMenu, setOpenMenu] = useState(null); // 'type' | 'indicators' | 'draw' | null
 
@@ -27,87 +31,116 @@ export default function ChartToolbar({
 
   return (
     <div ref={toolbarRef} className="chart-toolbar">
-
-      {/* ── Chart Type ──────────────────────────────────── */}
-      <div className="tb-dropdown-wrapper">
-        <button className="tb-btn" onClick={() => toggle('type')}>
-          <Settings2 size={15} /> Chart Type <ChevronDown size={14} />
-        </button>
-        {openMenu === 'type' && (
-          <div className="tb-dropdown">
-            <div className="tb-dropdown-title">Chart Type</div>
-            {CHART_TYPES.map(t => (
-              <button key={t.id} className="tb-dropdown-item" onClick={() => { onChartTypeChange(t.id); setOpenMenu(null); }}>
-                <span className="tb-icon">{t.icon}</span> {t.label}
+      {/* ── First Row: Timing Controls ──────────────────── */}
+      <div className="toolbar-row">
+        <div className="control-group">
+          <span className="group-label">View</span>
+          <div className="timeframe-group">
+            {['1W', '1M', '3M', '6M', '1Y', 'ALL'].map(tf => (
+              <button 
+                key={tf} 
+                className={`time-btn ${timeframe === tf ? 'active' : ''}`}
+                onClick={() => onTimeframeChange(tf)}
+              >
+                {tf}
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* ── Indicators Dropdown ────────────────────────── */}
-      <div className="tb-dropdown-wrapper">
-        <button className="tb-btn" onClick={() => toggle('indicators_only')}>
-          <Activity size={15} /> Indicators <ChevronDown size={14} />
-        </button>
-        {openMenu === 'indicators_only' && (
-          <div className="tb-dropdown">
-            <div className="tb-dropdown-title">Main Indicators</div>
-            {INDICATORS.map(ind => {
-              const isActive = activeIndicators.includes(ind.id);
-              return (
-                <button 
-                  key={ind.id + ind.label} 
-                  className={`tb-dropdown-item ${isActive ? 'tb-active' : ''}`} 
-                  onClick={() => onAddMainIndicator(ind.id)}
-                >
-                  {ind.label} {isActive && <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>✓</span>}
-                </button>
-              );
-            })}
+        <div className="control-group">
+          <span className="group-label">Interval</span>
+          <div className="timeframe-group">
+            {['1H', '4H', '1D'].map(iv => (
+              <button 
+                key={iv} 
+                className={`time-btn ${interval === iv ? 'active' : ''}`}
+                onClick={() => onIntervalChange(iv)}
+              >
+                {iv}
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* ── Oscillators Dropdown ────────────────────────── */}
-      <div className="tb-dropdown-wrapper">
-        <button className="tb-btn" onClick={() => toggle('oscillators_only')}>
-          <Activity size={15} /> Oscillators <ChevronDown size={14} />
-        </button>
-        {openMenu === 'oscillators_only' && (
-          <div className="tb-dropdown">
-            <div className="tb-dropdown-title">Technical Oscillators</div>
-            {OSCILLATORS.map(osc => {
-              const isActive = activeOscillators.includes(osc.id);
-              return (
-                <button 
-                  key={osc.id} 
-                  className={`tb-dropdown-item ${isActive ? 'tb-active' : ''}`} 
-                  onClick={() => onAddSubIndicator(osc.id)}
-                >
-                  {osc.label} {isActive && <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>✓</span>}
+      {/* ── Second Row: Analysis Tools ──────────────────── */}
+      <div className="toolbar-row secondary-row">
+        <div className="tb-dropdown-wrapper">
+          <button className="tb-btn" onClick={() => toggle('type')}>
+            <Settings2 size={15} /> Chart Type <ChevronDown size={14} />
+          </button>
+          {openMenu === 'type' && (
+            <div className="tb-dropdown">
+              <div className="tb-dropdown-title">Chart Type</div>
+              {CHART_TYPES.map(t => (
+                <button key={t.id} className="tb-dropdown-item" onClick={() => { onChartTypeChange(t.id); setOpenMenu(null); }}>
+                  <span className="tb-icon">{t.icon}</span> {t.label}
                 </button>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="tb-dropdown-wrapper">
+          <button className="tb-btn" onClick={() => toggle('indicators_only')}>
+            <Activity size={15} /> Indicators <ChevronDown size={14} />
+          </button>
+          {openMenu === 'indicators_only' && (
+            <div className="tb-dropdown">
+              <div className="tb-dropdown-title">Main Indicators</div>
+              {INDICATORS.map(ind => {
+                const isActive = activeIndicators.includes(ind.id);
+                return (
+                  <button 
+                    key={ind.id + ind.label} 
+                    className={`tb-dropdown-item ${isActive ? 'tb-active' : ''}`} 
+                    onClick={() => onAddMainIndicator(ind.id)}
+                  >
+                    {ind.label} {isActive && <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="tb-dropdown-wrapper">
+          <button className="tb-btn" onClick={() => toggle('oscillators_only')}>
+            <Activity size={15} /> Oscillators <ChevronDown size={14} />
+          </button>
+          {openMenu === 'oscillators_only' && (
+            <div className="tb-dropdown">
+              <div className="tb-dropdown-title">Technical Oscillators</div>
+              {OSCILLATORS.map(osc => {
+                const isActive = activeOscillators.includes(osc.id);
+                return (
+                  <button 
+                    key={osc.id} 
+                    className={`tb-dropdown-item ${isActive ? 'tb-active' : ''}`} 
+                    onClick={() => onAddSubIndicator(osc.id)}
+                  >
+                    {osc.label} {isActive && <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-
-
-      {/* Drawing tools are now handled natively by Plotly in the chart modebar */}
-
 
       {/* ── Inline CSS (scoped) ─────────────────────────── */}
       <style>{`
         .chart-toolbar {
           display: flex;
-          gap: 0.5rem;
-          align-items: center;
+          flex-direction: column;
+          gap: 1rem;
           padding: 0.5rem 0;
-          flex-wrap: wrap;
           position: relative;
           z-index: 60;
         }
+        .toolbar-row { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; }
+        .secondary-row { padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.05); }
         .tb-dropdown-wrapper { position: relative; }
         .tb-btn {
           display: flex;
@@ -139,17 +172,6 @@ export default function ChartToolbar({
           max-height: 420px;
           overflow-y: auto;
         }
-        .tb-dropdown-wide { min-width: 440px; }
-        .tb-dropdown-columns { display: flex; gap: 0.75rem; }
-        .tb-dropdown-col { flex: 1; min-width: 0; }
-        .tb-dropdown-title {
-          font-size: 0.7rem;
-          text-transform: uppercase;
-          letter-spacing: 0.08em;
-          color: var(--text-secondary);
-          padding: 0.4rem 0.5rem 0.25rem;
-          font-weight: 600;
-        }
         .tb-dropdown-item {
           display: flex;
           align-items: center;
@@ -168,11 +190,19 @@ export default function ChartToolbar({
         }
         .tb-dropdown-item:hover { background: var(--bg-panel-hover); color: var(--accent-primary); }
         .tb-active { background: rgba(var(--accent-primary-rgb), 0.12); color: var(--accent-primary); font-weight: 600; }
-        .tb-danger { color: var(--danger) !important; font-weight: 600; }
-
-        .tb-danger:hover { background: rgba(239,68,68,0.1) !important; }
-        .tb-divider { height: 1px; background: var(--border-color); margin: 0.3rem 0; }
         .tb-icon { width: 1.2rem; text-align: center; font-size: 0.8rem; opacity: 0.6; }
+
+        /* Unified Timing Controls Style */
+        .control-group { display: flex; flex-direction: column; gap: 4px; margin-left: 0.5rem; }
+        .group-label { font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 800; letter-spacing: 0.05em; padding-left: 4px; }
+        .timeframe-group { display: flex; background: rgba(255,255,255,0.03); border-radius: 8px; padding: 2px; border: 1px solid var(--border-color); }
+        .time-btn { 
+            background: transparent; border: none; color: var(--text-secondary); 
+            padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.75rem; font-weight: 700;
+            cursor: pointer; transition: 0.2s;
+        }
+        .time-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.05); }
+        .time-btn.active { background: #3b82f6; color: #fff; }
       `}</style>
     </div>
   );

@@ -1,0 +1,38 @@
+{
+  "packet_info": {
+    "version": "1.0.0",
+    "device_id": "SOLSHIP-EDGE-001",
+    "timestamp": "2024-05-09T12:00:00Z",
+    "transmission_mode": "BESS_STRATEGY"
+  },
+  "strategy": {
+    "horizon_hours": 24,
+    "interval_minutes": 60,
+    "schedule": [
+      {
+        "time": "12:00",
+        "action": "CHARGE",
+        "power_kw": 2.5,
+        "target_soc": 0.45
+      },
+      {
+        "time": "13:00",
+        "action": "IDLE",
+        "power_kw": 0,
+        "target_soc": 0.45
+      },
+      {
+        "time": "14:00",
+        "action": "DISCHARGE",
+        "power_kw": 5.0,
+        "target_soc": 0.20
+      }
+    ]
+  },
+  "constraints": {
+    "max_charge_rate": 5.0,
+    "max_discharge_rate": 10.0,
+    "min_soc": 0.2,
+    "max_soc": 0.95
+  }
+}

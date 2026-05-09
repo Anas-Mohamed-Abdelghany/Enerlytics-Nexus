@@ -25,11 +25,10 @@ export default function ApiForm({
             { label: "Twelve Data", value: "Twelve Data" },
             { label: "EOD Historical Data", value: "EOD" },
             { label: "Ember Energy", value: "Ember Energy" },
-            { label: "Enerlytics Data Service (Denmark)", value: "Energi Data" },
-            { label: "EnergypriceAPI", value: "EnergypriceAPI" },
             { label: "MetalpriceAPI", value: "MetalpriceAPI" },
             { label: "ForexRateAPI", value: "ForexRateAPI" },
-            { label: "U.S. Energy Info Admin (EIA)", value: "EIA" }
+            { label: "U.S. Energy Info Admin (EIA)", value: "EIA" },
+            { label: "Oil Price API", value: "Oil Price API" }
           ]} />
         </div>
         <div style={s.formGroup}>
@@ -64,6 +63,13 @@ export default function ApiForm({
         <button style={s.submitBtn} className="submit-btn" onClick={handleApiFetch}>
           <Wifi size={16} /> Fetch Market Data
         </button>
+
+        {["Oil Price API", "MetalpriceAPI", "ForexRateAPI"].includes(apiChoice) && (
+          <div style={{...s.errorBox, backgroundColor: "rgba(59, 130, 246, 0.1)", borderColor: "rgba(59, 130, 246, 0.3)", color: "var(--accent-primary)", marginTop: "1rem"}}>
+            <AlertTriangle size={18} />
+            <div><strong>Note:</strong> The {apiChoice} (Free Tier) only provides data for the <strong>{apiChoice === "ForexRateAPI" ? "past 5 days" : "past 30 days"}</strong>.</div>
+          </div>
+        )}
       </div>
 
       {error && <div style={s.errorBox}><AlertTriangle size={18} /><div><strong>Error:</strong> {error}</div></div>}

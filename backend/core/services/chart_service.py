@@ -151,7 +151,6 @@ def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", them
 
     fig_main.update_layout(
         template=template,
-        title=f"{ticker.upper()} Price Action",
         xaxis_rangeslider_visible=False,
         height=500,
         margin=dict(l=10, r=10, t=40, b=10),
@@ -208,7 +207,7 @@ def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", them
             fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
             
         fig_rsi.update_layout(
-            template=template, title="RSI", height=250, margin=dict(l=10, r=10, t=40, b=10),
+            template=template, height=250, margin=dict(l=10, r=10, t=40, b=10),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color=text_color))
         )
@@ -224,7 +223,7 @@ def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", them
             fig_cci.add_hline(y=-100, line_dash="dash", line_color="green")
             
         fig_cci.update_layout(
-            template=template, title="CCI", height=250, margin=dict(l=10, r=10, t=40, b=10),
+            template=template, height=250, margin=dict(l=10, r=10, t=40, b=10),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color=text_color))
         )
@@ -238,7 +237,7 @@ def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", them
             fig_atr.add_trace(go.Scatter(x=df['timestamp_dt'], y=df[atr_cols[0]], name='ATR', line=dict(color='orange')))
             
         fig_atr.update_layout(
-            template=template, title="ATR", height=250, margin=dict(l=10, r=10, t=40, b=10),
+            template=template, height=250, margin=dict(l=10, r=10, t=40, b=10),
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color=text_color))
         )
@@ -287,6 +286,97 @@ def generate_plotly_chart(series: List[OHLCVPoint], ticker: str = "Market", them
             if 'main' in results:
                 results['forecast'] = results['main']
 
+    # 7. Energy Management System Overview (3-Part Integrity View)
+    energy_cols = ['battery_p', 'grid_p', 'load_p', 'pv_p']
+    if any(col in df.columns for col in energy_cols):
+        try:
+            # Create subplots: 3 rows, 1 column
+            fig_energy = make_subplots(
+                rows=3, cols=1, 
+                shared_xaxes=True, 
+                vertical_spacing=0.08,
+                row_heights=[0.3, 0.4, 0.3],
+                subplot_titles=("Market Price", "Power Flows (kW)", "Reconstructed Battery SOC (%)")
+            )
+            
+            colors = {
+                'battery_p': '#3b82f6', # Blue
+                'grid_p': '#6366f1',    # Indigo
+                'load_p': '#ff8c42',    # Orange
+                'pv_p': '#fbbf24'       # Amber/Sun
+            }
+            names = {
+                'battery_p': 'Battery P',
+                'grid_p': 'Grid P',
+                'load_p': 'Load P',
+                'pv_p': 'Solar PV'
+            }
+
+            # 1. Price Bar Chart (Row 1)
+            # Detect which column actually has data
+            price_col = 'close'
+            if 'selling_price' in df.columns and not df['selling_price'].isnull().all():
+                price_col = 'selling_price'
+            elif 'Close' in df.columns:
+                price_col = 'Close'
+                
+            if price_col in df.columns:
+                fig_energy.add_trace(go.Bar(
+                    x=df['timestamp_dt'], 
+                    y=df[price_col],
+                    name='Market Price',
+                    marker_color='#3b82f6',
+                    opacity=0.8
+                ), row=1, col=1)
+
+            # 2. Power Flows (Row 2)
+            for col in energy_cols:
+                if col in df.columns and not df[col].isnull().all():
+                    fig_energy.add_trace(go.Scatter(
+                        x=df['timestamp_dt'], 
+                        y=df[col], 
+                        mode='lines', 
+                        name=names[col],
+                        line=dict(color=colors[col], width=2)
+                    ), row=2, col=1)
+
+            # 3. SOC Reconstructed (Row 3)
+            if 'soc_reconstructed' in df.columns:
+                fig_energy.add_trace(go.Scatter(
+                    x=df['timestamp_dt'], 
+                    y=df['soc_reconstructed'] * 100,
+                    mode='lines',
+                    name='SOC %',
+                    fill='tozeroy',
+                    fillcolor='rgba(16, 185, 129, 0.1)',
+                    line=dict(color='#10b981', width=3)
+                ), row=3, col=1)
+
+            fig_energy.update_layout(
+                template=template, 
+                height=720, 
+                showlegend=True,
+                margin=dict(l=10, r=10, t=40, b=10),
+                paper_bgcolor='rgba(0,0,0,0)', 
+                plot_bgcolor='rgba(0,0,0,0)',
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10, color=text_color)),
+                hovermode='x unified'
+            )
+            
+            # Update axes styling
+            fig_energy.update_yaxes(gridcolor='rgba(255,255,255,0.05)', tickfont=dict(size=9))
+            fig_energy.update_xaxes(showgrid=False, tickfont=dict(size=9))
+            
+            # Remove redundant subplot titles (Plotly adds them as annotations, but we want a cleaner look)
+            fig_energy.update_annotations(font=dict(size=10, color=text_color))
+
+            results['energy'] = fig_energy.to_html(
+                full_html=False, 
+                include_plotlyjs='cdn',
+                config={'responsive': True, 'displaylogo': False}
+            )
+        except Exception as e:
+            print(f"Error generating 3-part energy chart: {e}")
 
     return results
 

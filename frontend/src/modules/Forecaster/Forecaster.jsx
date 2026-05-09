@@ -1,5 +1,6 @@
 import React from "react";
-import { BrainCircuit, Clock, Loader } from "lucide-react";
+import { BrainCircuit, Clock, Loader, Battery } from "lucide-react";
+import BatterySOCChart from "../Dashboard/BatterySOCChart";
 
 export default function Forecaster({ plotlyHtml, predictionResult, isPredicting, isLoadingChart }) {
   const forecastHtml = plotlyHtml?.forecast;
@@ -100,6 +101,11 @@ export default function Forecaster({ plotlyHtml, predictionResult, isPredicting,
                   <span style={{ color: "var(--accent-secondary)", fontWeight: "700" }}>${predictionResult.points[0].forecast.toLocaleString()}</span>
                 </div>
               </div>
+            )}
+            
+            {/* Battery Simulation Chart */}
+            {predictionResult?.battery_simulation && (
+              <BatterySOCChart simulation={predictionResult.battery_simulation} />
             )}
           </div>
         ) : (

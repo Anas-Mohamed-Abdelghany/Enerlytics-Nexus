@@ -23,7 +23,7 @@ export async function get(endpoint, params = {}) {
   Object.entries(params).forEach(([k, v]) => url.searchParams.append(k, v));
 
   const controller = new AbortController();
-  const tid = setTimeout(() => controller.abort(), 8000);
+  const tid = setTimeout(() => controller.abort(), 30000);
   try {
     const res = await fetch(url, { method: "GET", credentials: "include", signal: controller.signal });
     clearTimeout(tid);
@@ -61,6 +61,7 @@ export const uploadApi = {
     });
     return _handleResponse(res, "/api/upload/");
   },
+  loadPredefined: () => get("/api/upload/predefined"),
 };
 
 // ─── Resample ─────────────────────────────────────────────────────────────────
@@ -82,8 +83,8 @@ export const marketApi = {
    * Fetch from Alpha Vantage or Financial Prep
    * Returns same UploadResponse format as uploadFile.
    */
-  fetchData: (api_choice, ticker, start_date, end_date) =>
-    get("/api/market/fetch", { api_choice, ticker, start_date, end_date }),
+  fetchData: (api_choice, ticker, start_date, end_date, interval) =>
+    get("/api/market/fetch", { api_choice, ticker, start_date, end_date, interval }),
   getTickers: () => 
     get("/api/market/tickers"),
 };
@@ -93,12 +94,12 @@ export const forecastApi = {
   /**
    * Train an LSTM on the provided historical series and return predicted future points or classification.
    */
-  fetchForecast: (market, horizonDays, series, predictionType = "regression", useBidirectional = true, checkSamples = 5) =>
+  fetchForecast: (market, horizonDays, series, predictionType = "regression", architecture = "bidirectional", checkSamples = 5) =>
     post("/api/forecast/", { 
       market, 
       horizon_days: horizonDays, 
       prediction_type: predictionType,
-      use_bidirectional: useBidirectional,
+      architecture,
       check_samples: checkSamples,
       series 
     }),
@@ -131,3 +132,9 @@ export const utilsApi = {
     get("/api/utils/convert", { symbol, amount }),
 };
 
+export const batteryApi = {
+  optimize: (data) =>
+    post("/api/battery/optimize", data),
+  audit: () =>
+    post("/api/battery/audit", {}),
+};

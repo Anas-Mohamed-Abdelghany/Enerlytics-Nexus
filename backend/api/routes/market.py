@@ -17,6 +17,7 @@ async def fetch_market_data(
     ticker: str = Query(..., description="Stock ticker symbol (e.g., AAPL)"),
     start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
     end_date: str = Query(..., description="End date (YYYY-MM-DD)"),
+    interval: str = Query("1D", description="Data interval/frequency (e.g., '1D', '1M')")
 ):
     """
     Fetch market data from an external API (Alpha Vantage or Financial Modeling Prep).
@@ -27,7 +28,8 @@ async def fetch_market_data(
             api_choice=api_choice,
             ticker=ticker,
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            interval=interval
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

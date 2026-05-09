@@ -28,15 +28,16 @@ TIMEFRAME_DAYS: dict[str, int | None] = {
 }
 
 INTERVAL_RULE: dict[str, str] = {
-    "1min":  "1min",
-    "5min":  "5min",
-    "15min": "15min",
-    "30min": "30min",
+    "1MIN":  "1min",
+    "5MIN":  "5min",
+    "15MIN": "15min",
+    "30MIN": "30min",
     "1H":    "1h",
     "4H":    "4h",
     "1D":    "1D",
     "1W":    "1W",
     "1M":    "1ME",   # month-end
+    "1Y":    "YE",    # year-end
 }
 
 

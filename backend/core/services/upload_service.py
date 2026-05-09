@@ -5,6 +5,12 @@ Supported formats:
   CSV  · TSV  · JSON  · XLSX  · XLS
 
 Column auto-detection is case-insensitive and handles common aliases.
+Supported columns:
+  - timestamp (required)
+  - close/price (required)
+  - open, high, low, volume (optional)
+  - battery_p, grid_p, load_p, pv_p (optional energy metrics)
+  - selling_price_eur_kwh (optional price alias)
 KPI calculations (volatility, period change) are done here so the
 frontend only receives ready-to-use numbers.
 """
@@ -19,6 +25,7 @@ from typing import List, Dict, Any, Optional
 import pandas as pd
 
 from models.schemas import OHLCVPoint, KPIResponse, UploadResponse
+from core.services.integrity_service import validate_energy_integrity
 
 
 # ─── Column alias map ────────────────────────────────────────────────────────
@@ -28,8 +35,14 @@ _COL_ALIASES: Dict[str, List[str]] = {
     "open":      ["open", "open_price", "o"],
     "high":      ["high", "high_price", "h"],
     "low":       ["low",  "low_price",  "l"],
-    "close":     ["close", "close_price", "price", "last", "c", "p"],
+    "close":     ["close", "close_price", "price", "last", "c", "p", "selling_price_eur_kwh", "selling_price", "price_eur_kwh", "price_kwh"],
     "volume":    ["volume", "vol", "v"],
+    # Energy Aliases
+    "battery_p": ["battery_p", "battery_power", "battery"],
+    "grid_p":    ["grid_p", "grid_power", "grid"],
+    "load_p":    ["load_p", "load_power", "load"],
+    "pv_p":      ["pv_p", "pv_power", "pv", "solar"],
+    "selling_price": ["selling_price_eur_kwh", "selling_price", "price_eur_kwh", "price_kwh"],
 }
 
 
@@ -60,13 +73,20 @@ def _normalise_df(df: pd.DataFrame) -> List[OHLCVPoint]:
     if close_col is None:
         raise ValueError(
             "No close/price column found. "
-            "Expected one of: close, price, last."
+            "Expected one of: close, price, selling_price_eur_kwh, last."
         )
 
     open_col   = _find_col(cols, "open")
     high_col   = _find_col(cols, "high")
     low_col    = _find_col(cols, "low")
     volume_col = _find_col(cols, "volume")
+    
+    # Energy columns
+    battery_col = _find_col(cols, "battery_p")
+    grid_col    = _find_col(cols, "grid_p")
+    load_col    = _find_col(cols, "load_p")
+    pv_col      = _find_col(cols, "pv_p")
+    sell_col    = _find_col(cols, "selling_price")
 
     # Parse timestamps
     df["_ts"] = pd.to_datetime(df[ts_col], infer_datetime_format=True, errors="coerce")
@@ -101,6 +121,11 @@ def _normalise_df(df: pd.DataFrame) -> List[OHLCVPoint]:
             low=low,
             close=close,
             volume=vol,
+            battery_p=float(pd.to_numeric(row[battery_col], errors="coerce")) if battery_col else None,
+            grid_p=float(pd.to_numeric(row[grid_col],       errors="coerce")) if grid_col    else None,
+            load_p=float(pd.to_numeric(row[load_col],       errors="coerce")) if load_col    else None,
+            pv_p=float(pd.to_numeric(row[pv_col],           errors="coerce")) if pv_col      else None,
+            selling_price=float(pd.to_numeric(row[sell_col], errors="coerce")) if sell_col   else None,
         ))
 
     return points
@@ -191,6 +216,10 @@ def parse_uploaded_file(filename: str, content: bytes) -> UploadResponse:
     df.columns = [str(c).strip() for c in df.columns]
 
     series = _normalise_df(df)
+    
+    # Apply Data Integrity Layer (SoC Reconstruction & Anomaly Detection)
+    series = validate_energy_integrity(series)
+    
     kpis   = _compute_kpis(series)
 
     return UploadResponse(
