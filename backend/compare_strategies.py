@@ -38,7 +38,11 @@ async def run_comparison():
     print("\n--- 🤖 PHASE 1: STATIC MODEL (Train: 2024 only) ---")
     await forecaster.train_pipeline(df_2024)
 
+    import shutil
+    model_dir = os.path.join(os.path.dirname(__file__), 'models')
+    
     # Predict April 2025 (Static)
+
     context_april = df_combined[df_combined['timestamp'] < '2025-05-01'].copy()
     feat_ctx_april = forecaster.build_energy_features(context_april.set_index('timestamp'))
     test_feat_april = feat_ctx_april[feat_ctx_april.index.month == 4].copy()
@@ -74,17 +78,15 @@ async def run_comparison():
     # ==========================================================
     print("\n--- 🚀 PHASE 2: WALK-FORWARD MODEL (Continuous Learning) ---")
     
-    import shutil
-    model_dir = os.path.join(os.path.dirname(__file__), 'models')
-
     # Train for April (2024 + Jan-Mar 2025)
     train_april_wf = df_combined[(df_combined['timestamp'] < '2025-04-01')].copy()
     print(f"Training on historical data up to April (Rows: {len(train_april_wf)})...")
     await forecaster.train_pipeline(train_april_wf)
     
-    # Save the April-specific model and scaler for the Web UI
+    # Save the April-specific model, scaler, and feature names for the Web UI
     shutil.copy(os.path.join(model_dir, 'lgbm_load.pkl'), os.path.join(model_dir, 'lgbm_load_april.pkl'))
     shutil.copy(os.path.join(model_dir, 'scaler.pkl'), os.path.join(model_dir, 'scaler_april.pkl'))
+    shutil.copy(os.path.join(model_dir, 'feature_names.pkl'), os.path.join(model_dir, 'feature_names_april.pkl'))
     
     X_april_wf = pd.DataFrame(forecaster.scaler.transform(test_feat_april[forecaster.feature_names]), columns=forecaster.feature_names)
     preds_april_wf = np.maximum(0.1, forecaster.load_model.predict(X_april_wf))
@@ -99,9 +101,11 @@ async def run_comparison():
     print(f"\nRe-training on historical data up to September (Rows: {len(train_sept_wf)})...")
     await forecaster.train_pipeline(train_sept_wf)
 
-    # Save the Sept-specific model and scaler for the Web UI
+    # Save the Sept-specific model, scaler, and feature names for the Web UI
     shutil.copy(os.path.join(model_dir, 'lgbm_load.pkl'), os.path.join(model_dir, 'lgbm_load_sept.pkl'))
     shutil.copy(os.path.join(model_dir, 'scaler.pkl'), os.path.join(model_dir, 'scaler_sept.pkl'))
+    shutil.copy(os.path.join(model_dir, 'feature_names.pkl'), os.path.join(model_dir, 'feature_names_sept.pkl'))
+
 
     X_sept_wf = pd.DataFrame(forecaster.scaler.transform(test_feat_sept[forecaster.feature_names]), columns=forecaster.feature_names)
     preds_sept_wf = np.maximum(0.1, forecaster.load_model.predict(X_sept_wf))

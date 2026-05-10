@@ -198,33 +198,37 @@ export default function BatteryDashboard({
       ["Model Architecture", "DirectMultiStep-LGBM-v2"],
       [],
       ["--- SUMMARY METRICS ---"],
-      ["Period", "RMSE (kW)", "MAE (kW)", "NRMSE (%)", "Data Points"],
+      ["Period", "RMSE", "MAE/MAPE", "NRMSE", "Data Points"],
       [auditData.april.period, auditData.april.rmse, auditData.april.mae, auditData.april.nrmse, auditData.april.points],
       [auditData.september.period, auditData.september.rmse, auditData.september.mae, auditData.september.nrmse, auditData.september.points],
       ["AGGREGATE PERFORMANCE", "", "", auditData.overall_nrmse + "%"],
       [],
       ["--- DETAILED HOURLY AUDIT DATA ---"],
-      ["Period", "Timestamp", "Actual Load (kW)", "Predicted (kW)", "Delta (kW)", "Absolute Error (kW)", "Squared Error", "Error (%)"]
+      ["Period", "Timestamp", "load_p", "load_new", "pv_p", "selling_price_eur_kwh", "Delta (kW)", "MAE/MAPE", "RMSE", "NRMSE"]
     ];
 
     ['april', 'september'].forEach(month => {
       if (auditData[month].series) {
         auditData[month].series.forEach(p => {
-          const absError = Math.abs(p.actual - p.predicted);
-          const sqError = Math.pow(p.actual - p.predicted, 2);
+          const absError = Math.abs(p.load_p - p.load_new);
+          const sqError = Math.pow(p.load_p - p.load_new, 2);
           csvRows.push([
             auditData[month].period,
             p.ts,
-            p.actual,
-            p.predicted,
+            p.load_p,
+            p.load_new,
+            p.pv_p,
+            p.selling_price_eur_kwh,
             p.delta,
             absError.toFixed(4),
-            sqError.toFixed(6),
+            Math.sqrt(sqError).toFixed(4), // This is RMSE for a single point (same as absolute error)
             p.error_pct + "%"
           ]);
         });
       }
     });
+
+
 
     const csvContent = csvRows.map(row => row.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -710,18 +714,19 @@ export default function BatteryDashboard({
                     <thead style={{ position: 'sticky', top: 0, background: '#1a1a1a', zIndex: 10 }}>
                       <tr style={{ textAlign: 'left', borderBottom: `1px solid ${THEME.border}` }}>
                         <th style={{ padding: '0.75rem' }}>Timestamp</th>
-                        <th style={{ padding: '0.75rem' }}>Actual Load (kW)</th>
-                        <th style={{ padding: '0.75rem' }}>Predicted (kW)</th>
+                        <th style={{ padding: '0.75rem' }}>load_p</th>
+                        <th style={{ padding: '0.75rem' }}>load_new</th>
                         <th style={{ padding: '0.75rem' }}>Delta (kW)</th>
                         <th style={{ padding: '0.75rem' }}>Error %</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(auditData[expandedMonth].series || []).slice(0, 96).map((item, i) => {
-                        const actual = item.actual;
-                        const pred = item.predicted;
+                        const actual = item.load_p;
+                        const pred = item.load_new;
                         const delta = item.delta;
                         const err = item.error_pct;
+
                         return (
                           <tr key={i} style={{ borderBottom: `1px solid ${THEME.border}33`, opacity: 0.9 }}>
                             <td style={{ padding: '0.5rem 0.75rem', color: THEME.textSecondary }}>{new Date(item.ts).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>

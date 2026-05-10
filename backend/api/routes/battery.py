@@ -159,29 +159,65 @@ async def run_audit(request: Dict = None):
         # Check if we have a model to generate predictions
         if model_exists:
             try:
+                # IMPORTANT: Build features on the FULL dataset first to preserve history for lags/indicators
+                # Then slice into the specific month
+                full_feat_df = forecaster.build_energy_features(df.set_index('timestamp'))
+                
+                # Check for target year/month in the featured dataframe
+                month_with_features = full_feat_df[(full_feat_df.index.year == target_year) & (full_feat_df.index.month == month_num)].copy()
+                
+                if month_with_features.empty:
+                    # If empty, it might be because the year/month filtering failed or data is missing
+                    # Fallback to engineering just the month_df as a last resort
+                    print(f"⚠️ Warning: Full features slice for {month_name} {target_year} is empty. Falling back to month-only engineering.")
+                    month_with_features = forecaster.build_energy_features(month_df.set_index('timestamp'))
+
+                # Extract solar and tariff bands from the featured df
+                solars = month_with_features['solar'].values if 'solar' in month_with_features.columns else (month_with_features['pv_p'].values if 'pv_p' in month_with_features.columns else np.zeros(len(month_with_features)))
+                t_f1 = month_with_features['tariff_f1'].values if 'tariff_f1' in month_with_features.columns else np.zeros(len(month_with_features), dtype=bool)
+                t_f2 = month_with_features['tariff_f2'].values if 'tariff_f2' in month_with_features.columns else np.zeros(len(month_with_features), dtype=bool)
+                t_f3 = month_with_features['tariff_f3'].values if 'tariff_f3' in month_with_features.columns else np.zeros(len(month_with_features), dtype=bool)
+                
+                # Calculate buying price (fixed tariffs)
+                buying_prices = np.where(t_f1, 0.2540, np.where(t_f2, 0.2682, 0.2440))
+
                 if current_arch in ["advanced", "lightgbm"] and forecaster.load_model:
                     # LightGBM Path
+                    # 1. Determine which feature schema to use
+                    special_feat_path = os.path.join(MODEL_DIR, f'feature_names_{month_name.lower()}.pkl')
                     feat_path = os.path.join(MODEL_DIR, 'feature_names.pkl')
-                    if os.path.exists(feat_path):
-                        forecaster.feature_names = joblib.load(feat_path)
-                        
-                    full_feat_df = forecaster.build_energy_features(df.set_index('timestamp'))
-                    month_feat_df = full_feat_df[(full_feat_df.index.year == target_year) & (full_feat_df.index.month == month_num)].copy()
                     
-                    if month_feat_df.empty:
-                        month_feat_df = forecaster.build_energy_features(month_df.set_index('timestamp'))
-
-                    if not month_feat_df.empty:
-                        # Convert back to DataFrame to preserve feature names for LightGBM
-                        X_scaled = forecaster.scaler.transform(month_feat_df[forecaster.feature_names])
-                        X = pd.DataFrame(X_scaled, columns=forecaster.feature_names)
-                        
-                        predictions = forecaster.load_model.predict(X)
-                        actuals = month_feat_df['load'].values if 'load' in month_feat_df.columns else month_feat_df['load_p'].values
-                        timestamps = month_feat_df.index.strftime('%Y-%m-%dT%H:%M:%S').tolist()
+                    schema_features = []
+                    if os.path.exists(special_feat_path):
+                        schema_features = joblib.load(special_feat_path)
+                    elif hasattr(forecaster.scaler, 'feature_names_in_'):
+                        # Best source of truth: the scaler itself knows what it was fitted with
+                        schema_features = list(forecaster.scaler.feature_names_in_)
+                    elif os.path.exists(feat_path):
+                        schema_features = joblib.load(feat_path)
                     else:
-                        raise ValueError(f"Insufficient data to build features for {month_name}")
+                        schema_features = forecaster.feature_names
 
+                    # Update the forecaster instance so it's consistent
+                    forecaster.feature_names = schema_features
+                    
+                    # 2. Ensure all required features are present in the dataframe
+                    for feat in schema_features:
+                        if feat not in month_with_features.columns:
+                            # If a feature is missing (e.g. price indicators), it might be due to 
+                            # data quality or pandas_ta issues. We must fill it to prevent scaler crash.
+                            month_with_features[feat] = 0.0
+
+                    # 3. Select and scale
+                    X_data = month_with_features[schema_features].astype(float)
+                    X_scaled = forecaster.scaler.transform(X_data)
+                    X = pd.DataFrame(X_scaled, columns=schema_features)
+                    
+                    predictions = forecaster.load_model.predict(X)
+                    actuals = month_with_features['load'].values if 'load' in month_with_features.columns else month_with_features['load_p'].values
+                    timestamps = month_with_features.index.strftime('%Y-%m-%dT%H:%M:%S').tolist()
+
+                    
                 elif architecture in ["standard", "bidirectional"]:
                     # LSTM Path
                     from core.services.lstm_forecaster import predict_lstm_batch
@@ -190,16 +226,22 @@ async def run_audit(request: Dict = None):
                     timestamps = month_df['timestamp'].dt.strftime('%Y-%m-%dT%H:%M:%S').tolist()
                     
                     # LSTM consumes the first 'lookback' (60) rows to make the first prediction
-                    # Align actuals and timestamps to the end of the arrays
+                    # Align all arrays to the end
                     if len(actuals) > len(predictions):
-                        actuals = actuals[-len(predictions):]
-                        timestamps = timestamps[-len(predictions):]
+                        offset = len(actuals) - len(predictions)
+                        actuals = actuals[offset:]
+                        timestamps = timestamps[offset:]
+                        solars = solars[offset:] if len(solars) >= len(actuals) else np.zeros(len(predictions))
+                        buying_prices = buying_prices[offset:] if len(buying_prices) >= len(actuals) else np.zeros(len(predictions))
                     elif len(predictions) > len(actuals):
                         predictions = predictions[-len(actuals):]
                 else:
                     raise ValueError(f"Unsupported architecture: {architecture}")
+
             except Exception as e:
                 print(f"Prediction failed for {month_name} ({architecture}): {e}")
+                import traceback
+                traceback.print_exc()
                 return {"error": f"Audit Failed: {str(e)}. Please ensure your model is trained for {architecture}."}
         else:
             # NO FAKE DATA - Raise error if model missing
@@ -213,6 +255,8 @@ async def run_audit(request: Dict = None):
             actuals = actuals[valid_idx]
             predictions = predictions[valid_idx]
             timestamps = np.array(timestamps)[valid_idx].tolist()
+            solars = solars[valid_idx]
+            buying_prices = buying_prices[valid_idx]
             
         if len(actuals) == 0:
             return {"error": f"Audit Failed: No valid data points remaining for {month_name}."}
@@ -232,13 +276,17 @@ async def run_audit(request: Dict = None):
             "series": [
                 {
                     "ts": timestamps[i],
-                    "actual": round(float(actuals[i]), 3),
-                    "predicted": round(float(predictions[i]), 3),
+                    "load_p": round(float(actuals[i]), 3),
+                    "load_new": round(float(predictions[i]), 3),
+                    "pv_p": round(float(solars[i]), 3),
+                    "selling_price_eur_kwh": round(float(buying_prices[i]), 4),
                     "delta": round(float(predictions[i] - actuals[i]), 3),
                     "error_pct": round(abs(predictions[i] - actuals[i]) / actuals[i] * 100, 2) if actuals[i] > 0 else 0
                 } for i in range(len(actuals))
             ]
         }
+
+
 
     # Calculate overall NRMSE
     if overall_actuals:

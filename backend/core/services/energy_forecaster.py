@@ -171,7 +171,6 @@ class EnergyForecaster:
         # Daily cycle: peak at 15:00
         daily_variation = 4 * np.cos(2 * np.pi * (hour - 15) / 24)
         df['temp_estimate'] = annual_temp + daily_variation
-        
         # Heating/Cooling Degree Days based strictly on Month (Milan Historical Averages)
         monthly_hdd = {1: 15, 2: 13, 3: 9, 4: 5, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 4, 11: 10, 12: 14}
         monthly_cdd = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 4, 7: 7, 8: 6, 9: 2, 10: 0, 11: 0, 12: 0}
@@ -200,6 +199,11 @@ class EnergyForecaster:
         solar_data = df.index.to_series().apply(get_solar_features)
         df['time_since_sunrise_h'] = solar_data[0].values
         df['time_until_sunset_h'] = solar_data[1].values
+        
+        # Explicit Day/Night binary feature based on solar position
+        df['is_daytime'] = (df['time_since_sunrise_h'] > 0) & (df['time_until_sunset_h'] > 0)
+
+
 
         # 4. Behavioral & Economic Features (Advanced)
         if 'load' in df.columns and 'solar' in df.columns:
@@ -399,7 +403,23 @@ async def predict_forecast(req: Dict):
         df_future['direct_radiation'] = weather.get('direct_radiation', [0] * len(future_ts))
         df_future['relative_humidity'] = weather.get('relative_humidity', [50] * len(future_ts))
 
-        feat_df = forecaster.build_energy_features(df_future)
+        # We need historical data to compute 24h+ lags!
+        hist_data = req.get('historical_data', [])
+        df_hist = pd.DataFrame(hist_data)
+        
+        if not df_hist.empty:
+            df_hist['timestamp'] = pd.to_datetime(df_hist['timestamp'])
+            df_hist.set_index('timestamp', inplace=True)
+            
+            # Align columns if necessary, then concatenate
+            df_combined = pd.concat([df_hist, df_future])
+            feat_df_combined = forecaster.build_energy_features(df_combined)
+            
+            # Slice only the future rows for prediction
+            feat_df = feat_df_combined.loc[df_future.index]
+        else:
+            # Fallback (will result in NaNs for lags, but avoids structural crash)
+            feat_df = forecaster.build_energy_features(df_future)
         X = pd.DataFrame(
             forecaster.scaler.transform(feat_df[forecaster.feature_names]),
             columns=forecaster.feature_names
