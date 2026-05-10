@@ -92,6 +92,7 @@ class ForecastRequest(BaseModel):
 
 class BatteryOptimizationRequest(BaseModel):
     price_forecast: List[float]
+    sell_price_forecast: Optional[List[float]] = None
     load_forecast: List[float]
     solar_forecast: List[float]
     soc_init: Optional[float] = 0.5

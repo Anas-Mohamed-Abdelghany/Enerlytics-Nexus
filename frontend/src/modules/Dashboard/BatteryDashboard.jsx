@@ -153,7 +153,8 @@ export default function BatteryDashboard({
   architecture,
   aprilSource,
   septSource,
-  predictionType
+  predictionType,
+  onManualOptimize
 }) {
   const [replayStep, setReplayStep] = useState(0);
   const [isReplaying, setIsReplaying] = useState(false);
@@ -254,14 +255,33 @@ export default function BatteryDashboard({
     return () => clearInterval(interval);
   }, [isReplaying, optimizerResult]);
 
+  // Removed auto-trigger to allow manual start via button
+  /*
   useEffect(() => {
     // Auto-trigger audit on mount if we have data and haven't run it yet
     if (!auditData && !isAuditing && historicalData?.length > 0) {
       handleRunAudit();
     }
   }, [historicalData]);
+  */
 
   const stats = useMemo(() => {
+    // Priority 1: Audit Data (if available)
+    if (forecastResult?.is_audit && forecastResult.april && forecastResult.september) {
+      const a_bill = (forecastResult.Annual_Bill_EUR?.['Baseline A'] || 0) + (forecastResult.Annual_Bill_EUR?.['Baseline B'] || 0);
+      const ctrl_bill = (forecastResult.Annual_Bill_EUR?.['Your Controller'] || 0) * 2; // Approximate annual
+
+      return {
+        savings: (forecastResult["Savings vs. A (EUR)"]?.["Your Controller"] || 0),
+        savings_pct: parseFloat(forecastResult["Savings vs. A (%)"]?.["Your Controller"]) || 0,
+        soc: 50.0,
+        grid: 0,
+        solar: 0,
+        baseline: (forecastResult["Annual Bill (EUR)"]?.["Baseline A"] || 0),
+        total: (forecastResult["Annual Bill (EUR)"]?.["Your Controller"] || 0)
+      };
+    }
+
     if (!optimizerResult && historicalData?.length > 0) {
       // Find the last ACTUAL data point, skipping future forecast points
       const actuals = historicalData.filter(d => !d.is_forecast);
@@ -279,7 +299,8 @@ export default function BatteryDashboard({
         total: 0
       };
     }
-    if (!optimizerResult) return { savings: 0, soc: 0, grid: 0, solar: 0, baseline: 0, total: 0 };
+    if (!optimizerResult) return { savings: 0, savings_pct: 0, soc: 0, grid: 0, solar: 0, baseline: 0, total: 0 };
+
     const socLen = optimizerResult.soc_trajectory?.length || 0;
     const powerLen = optimizerResult.grid_import?.length || 0;
 
@@ -290,7 +311,7 @@ export default function BatteryDashboard({
     return {
       savings: optimizerResult.savings_eur || 0,
       savings_pct: optimizerResult.savings_pct || 0,
-      soc: (optimizerResult.soc_trajectory?.[currentStep] ?? 0), // Should be ~50.0 at step 0
+      soc: (optimizerResult.soc_trajectory?.[currentStep] ?? 0) * 100,
       grid: optimizerResult.grid_import?.[powerStep] || 0,
       solar: forecastResult?.solar_forecast?.[powerStep] || 0,
       baseline: optimizerResult.baseline_cost_eur || 0,
@@ -298,15 +319,7 @@ export default function BatteryDashboard({
     };
   }, [optimizerResult, forecastResult, replayStep, isReplaying, historicalData]);
 
-  const anomalies = useMemo(() => {
-    if (!historicalData) return [];
-    return historicalData
-      .filter(p => p.integrity_flags?.length > 0)
-      .map(p => ({
-        ts: new Date(p.timestamp).toLocaleTimeString(),
-        flags: p.integrity_flags
-      })).slice(-5); // Show last 5
-  }, [historicalData]);
+
 
   const generateMainPlotData = () => {
     // Priority: Historical Data (Actuals) -> Optimizer Results (Simulated)
@@ -446,6 +459,30 @@ export default function BatteryDashboard({
     a.click();
   };
 
+  const handleExportOptimizationLog = () => {
+    const data = auditData || (forecastResult?.is_audit ? forecastResult : null);
+    if (!data) return;
+
+    let csvRows = [["Timestamp", "Action_P_Bat", "Action", "SoC", "Cost_EUR"]];
+
+    ['april', 'september'].forEach(month => {
+      if (data[month]?.optimization?.schedule) {
+        data[month].optimization.schedule.forEach(row => {
+          const action = row.action_p_bat < -0.1 ? "CHARGE" : row.action_p_bat > 0.1 ? "DISCHARGE" : "IDLE";
+          csvRows.push([row.ts, row.action_p_bat, action, row.soc, row.cost_eur]);
+        });
+      }
+    });
+
+    const csvContent = csvRows.map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `BESS_Optimization_Log_Audit_2025.csv`;
+    link.click();
+  };
+
   if (isLoading) {
     return (
       <div className="bloomberg-dashboard-skeleton">
@@ -580,59 +617,6 @@ export default function BatteryDashboard({
         />
       </div>
 
-      <div className="dual-row">
-        {/* Data Integrity Monitor */}
-        {anomalies.length > 0 && (
-          <div className="main-panel alert-panel">
-            <div className="panel-header-row">
-              <div className="panel-title-group">
-                <AlertTriangle size={18} color={THEME.danger} />
-                <h3>Data Integrity Monitor</h3>
-              </div>
-              <span className="badge danger">{anomalies.length} Anomalies</span>
-            </div>
-            <div className="anomaly-list">
-              {anomalies.map((a, idx) => (
-                <div key={idx} className="anomaly-item">
-                  <span className="anomaly-ts">{a.ts}</span>
-                  <div className="anomaly-flags">
-                    {a.flags.map((f, fidx) => <span key={fidx} className="flag-pill">{f}</span>)}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <p className="integrity-note">
-              Engineering Rigor: SoC is reconstructed step-by-step using efficiency η=0.9487. Energy balance is verified for all points.
-            </p>
-          </div>
-        )}
-
-        {/* 5. Revenue Summary */}
-        <div className="main-panel revenue-panel">
-          <div className="panel-title-group"><TrendingUp size={18} color={THEME.success} /><h3>Financial ROI Engine</h3></div>
-          <div className="roi-content">
-            <div className="comparison-row">
-              <div className="metric"><span className="label">Optimized</span><span className="val">€{stats.total.toFixed(2)}</span></div>
-              <div className="divider"><ArrowRight size={20} /></div>
-              <div className="metric"><span className="label">Baseline</span><span className="val">€{stats.baseline.toFixed(2)}</span></div>
-            </div>
-            <div className="progress-bar-wrap">
-              <div className="progress-fill" style={{ width: `${stats.baseline > 0 ? (stats.total / stats.baseline) * 100 : 0}%` }} />
-            </div>
-            <div className="savings-callout">
-              <CheckCircle2 size={24} color={THEME.success} />
-              <div>
-                <p className="main-save">Saved <strong>€{stats.savings.toFixed(2)}</strong> today</p>
-                <p className="sub-save">Efficiency increased by <strong>{stats.baseline > 0 ? ((stats.savings / stats.baseline) * 100).toFixed(1) : 0}%</strong></p>
-              </div>
-            </div>
-            <div className="annual-projection">
-              <Info size={14} /> Annual Projection: <strong>€{(stats.savings * 365).toLocaleString()} / year</strong>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* 3. Official Audit Scorecard */}
       <div className="main-panel audit-panel" style={{ border: `2px solid ${THEME.solar}44`, background: `${THEME.solar}05`, marginBottom: '1.5rem' }}>
         <div className="panel-header-row">
@@ -748,33 +732,96 @@ export default function BatteryDashboard({
 
       {/* 4. Optimizer Action Table */}
       <div className="main-panel table-panel">
-        <div className="panel-title-group"><LayoutGrid size={18} color={THEME.accent} /><h3>BESS Operational Execution Schedule</h3></div>
+        <div className="panel-header-row">
+          <div className="panel-title-group">
+            <LayoutGrid size={18} color={THEME.accent} />
+            <h3>BESS Operational Execution Schedule</h3>
+          </div>
+          <div className="panel-actions">
+            {forecastResult?.is_audit && (
+              <button
+                className="action-btn"
+                onClick={handleExportOptimizationLog}
+                style={{ border: `1px solid ${THEME.success}`, color: THEME.success }}
+              >
+                <Download size={14} /> Save Result CSV (Audit Months)
+              </button>
+            )}
+            {!forecastResult?.is_audit && forecastResult?.points && (
+              <button
+                className="action-btn"
+                onClick={onManualOptimize}
+                style={{ border: `1px solid ${THEME.solar}`, color: THEME.solar }}
+              >
+                <Zap size={14} /> Run Optimization
+              </button>
+            )}
+            <button className="action-btn primary" onClick={handleExport}><Download size={14} /> Export Current View</button>
+          </div>
+        </div>
+
+        {(auditData || forecastResult?.is_audit) && (
+          <div className="audit-bill-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', marginBottom: '1.5rem', border: `1px solid ${THEME.border}` }}>
+            {['april', 'september'].map(month => {
+              const data = auditData?.[month] || forecastResult?.[month];
+              return (
+                <div key={month} style={{ borderRight: month === 'april' ? `1px solid ${THEME.border}` : 'none', paddingRight: month === 'april' ? '1rem' : 0 }}>
+                  <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {month} 2025</h4>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                    <div>
+                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>Optimized Bill</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: THEME.success }}>€{data?.optimization?.optimized_bill || 0}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>Baseline (No Battery)</div>
+                      <div style={{ fontSize: '1rem', fontWeight: 600, opacity: 0.8 }}>€{data?.optimization?.baseline_bill || 0}</div>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: THEME.success, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <TrendingUp size={12} /> Savings: €{data?.optimization?.savings || 0} ({data?.optimization?.savings_pct || 0}%)
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         <div className="table-wrapper">
           <table>
             <thead><tr><th>Time</th><th>Action</th><th>Power (kW)</th><th>Price (€)</th><th>End SOC</th><th>P&L</th></tr></thead>
             <tbody>
-              {(optimizerResult?.timestamps?.slice(0, 48) || historicalData?.slice(0, 48) || []).map((data, i) => {
-                const t = optimizerResult ? data : data.timestamp;
-                const charge = optimizerResult?.charge_schedule?.[i] || (historicalData?.[i]?.battery_p < 0 ? historicalData?.[i]?.battery_p : 0);
-                const discharge = optimizerResult?.discharge_schedule?.[i] || (historicalData?.[i]?.battery_p > 0 ? historicalData?.[i]?.battery_p : 0);
-                const action = charge < -0.1 ? "CHARGE" : discharge > 0.1 ? "DISCHARGE" : "IDLE";
-                const rowStyle = action === "CHARGE" ? 'row-charge' : action === "DISCHARGE" ? 'row-discharge' : 'row-idle';
-                const price = priceHistory?.prices?.[i] || 0;
-                const soc = optimizerResult?.soc_trajectory?.[i] || (historicalData?.[i]?.soc_reconstructed || 0);
+              {(() => {
+                const activeAuditData = auditData?.[expandedMonth || 'april'] || forecastResult?.[expandedMonth || 'april'];
+                const rows = activeAuditData?.optimization?.schedule ? activeAuditData.optimization.schedule.slice(0, 48) : (optimizerResult?.timestamps?.slice(0, 48) || historicalData?.slice(0, 48) || []);
 
-                return (
-                  <tr key={i} className={rowStyle} style={{ opacity: isReplaying && i > replayStep ? 0.3 : 1 }}>
-                    <td>{new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                    <td><span className={`badge ${action.toLowerCase()}`}>{action}</span></td>
-                    <td className="mono">{(charge + discharge).toFixed(2)}</td>
-                    <td className="mono">€{price.toFixed(3)}</td>
-                    <td className="mono">{(soc * 100).toFixed(1)}%</td>
-                    <td className={`mono pnl ${action === 'DISCHARGE' ? 'plus' : ''}`}>
-                      {((charge + discharge) * price * 0.25).toFixed(3)}€
-                    </td>
-                  </tr>
-                );
-              })}
+                return rows.map((data, i) => {
+                  const isAuditRow = !!data.ts;
+                  const t = isAuditRow ? data.ts : (optimizerResult ? data : data.timestamp);
+
+                  const charge = isAuditRow ? (data.action_p_bat < 0 ? data.action_p_bat : 0) : (optimizerResult?.charge_schedule?.[i] || (historicalData?.[i]?.battery_p < 0 ? historicalData?.[i]?.battery_p : 0));
+                  const discharge = isAuditRow ? (data.action_p_bat > 0 ? data.action_p_bat : 0) : (optimizerResult?.discharge_schedule?.[i] || (historicalData?.[i]?.battery_p > 0 ? historicalData?.[i]?.battery_p : 0));
+
+                  const action = charge < -0.1 ? "CHARGE" : discharge > 0.1 ? "DISCHARGE" : "IDLE";
+                  const rowStyle = action === "CHARGE" ? 'row-charge' : action === "DISCHARGE" ? 'row-discharge' : 'row-idle';
+
+                  const price = isAuditRow ? (activeAuditData?.series?.[i]?.selling_price_eur_kwh || 0) : (priceHistory?.prices?.[i] || 0);
+                  const soc = isAuditRow ? data.soc : (optimizerResult?.soc_trajectory?.[i] || (historicalData?.[i]?.soc_reconstructed || 0));
+                  const pnl = isAuditRow ? data.cost_eur : ((charge + discharge) * price * 0.25);
+
+                  return (
+                    <tr key={i} className={rowStyle} style={{ opacity: isReplaying && i > replayStep ? 0.3 : 1 }}>
+                      <td>{new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td><span className={`badge ${action.toLowerCase()}`}>{action}</span></td>
+                      <td className="mono">{(charge + discharge).toFixed(3)}</td>
+                      <td className="mono">€{price.toFixed(3)}</td>
+                      <td className="mono">{(soc * 100).toFixed(1)}%</td>
+                      <td className={`mono pnl ${pnl < 0 ? 'plus' : ''}`}>
+                        {pnl.toFixed(4)}€
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>

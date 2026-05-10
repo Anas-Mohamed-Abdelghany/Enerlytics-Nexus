@@ -54,7 +54,8 @@ export default function Dashboard({ isDarkMode }) {
         // Handlers
         handlePredict, handleStrategy, handleDownloadCSV,
         handleTrainAll,
-        changeTimeframe, changeInterval, timeframe, interval
+        changeTimeframe, changeInterval, timeframe, interval,
+        handleManualOptimize
     } = dashboard;
 
     // Auto-switch to AI tab when data is loaded
@@ -455,59 +456,82 @@ export default function Dashboard({ isDarkMode }) {
                             </div>
                         </div>
                     ) : (
-                        <div style={s.heroContainer}>
-                            <div style={s.heroGrid}>
-                                {/* 01. PREDICT */}
-                                <div className="hero-card" style={s.heroCard}>
-                                    <div style={{ ...s.heroCardTopBar, background: '#1e293b' }} />
-                                    <div style={s.heroCardNumber}>01</div>
-                                    <div>
-                                        <h2 style={s.heroCardTitle}>PREDICT</h2>
-                                        <span style={s.heroCardSub}>Load Forecasting</span>
+                            <div className="mission-container" style={{ padding: '3rem', maxWidth: '1200px', margin: '0 auto' }}>
+                                <div className="mission-layout" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '4rem', alignItems: 'start' }}>
+                                    <div className="mission-text">
+                                        <h1 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '2rem', color: 'var(--text-primary)' }}>Your Mission</h1>
+                                        <p style={{ fontSize: '1.1rem', lineHeight: 1.6, color: 'var(--text-secondary)', marginBottom: '2rem' }}>
+                                            You are given a residential site in Italy connected to the utility grid, a <strong>9 kWp</strong> rooftop solar PV system, and a <strong>16 kWh</strong> lithium battery.
+                                        </p>
+                                        <div className="objectives" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '3rem' }}>
+                                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '0.5rem' }}>Build two things:</h3>
+                                            <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
+                                                <div style={{ width: '24px', height: '24px', background: '#f59e0b', borderRadius: '4px', flexShrink: 0, marginTop: '4px' }} />
+                                                <div>
+                                                    <strong style={{ display: 'block', fontSize: '1.1rem' }}>A load forecasting model</strong>
+                                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' }}>trained on 2024 data, applied to 2025</span>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'start', gap: '1rem' }}>
+                                                <div style={{ width: '24px', height: '24px', background: '#f59e0b', borderRadius: '4px', flexShrink: 0, marginTop: '4px' }} />
+                                                <div>
+                                                    <strong style={{ display: 'block', fontSize: '1.1rem' }}>A rolling-horizon battery</strong>
+                                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontStyle: 'italic' }}>dispatch controller that cuts the electricity bill</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="sign-convention">
+                                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Power Sign Convention</h3>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', borderRadius: '8px', overflow: 'hidden' }}>
+                                                <thead>
+                                                    <tr style={{ background: '#1e293b', color: '#fff', textAlign: 'left' }}>
+                                                        <th style={{ padding: '12px 16px' }}>Variable / Sign</th>
+                                                        <th style={{ padding: '12px 16px' }}>Meaning</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)' }}>
+                                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                        <td className="mono" style={{ padding: '10px 16px' }}>P_battery &lt; 0</td>
+                                                        <td style={{ padding: '10px 16px' }}>Battery charging</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                        <td className="mono" style={{ padding: '10px 16px' }}>P_battery &gt; 0</td>
+                                                        <td style={{ padding: '10px 16px' }}>Battery discharging</td>
+                                                    </tr>
+                                                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                                                        <td className="mono" style={{ padding: '10px 16px' }}>P_grid &gt; 0</td>
+                                                        <td style={{ padding: '10px 16px' }}>Importing from grid</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td className="mono" style={{ padding: '10px 16px' }}>P_grid &lt; 0</td>
+                                                        <td style={{ padding: '10px 16px' }}>Exporting to grid</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
-                                    <div className="hero-divider" style={s.heroCardDivider} />
-                                    <p style={s.heroCardDesc}>
-                                        Deep learning models ingest historical consumption, solar generation, temperature, and price signals to forecast load at 15-minute resolution.
-                                    </p>
+                                    <div className="site-layout-panel" style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '24px', padding: '2rem', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                                        <h2 style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '2rem', letterSpacing: '1px' }}>Site Layout</h2>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                            <div style={{ background: '#f59e0b', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', color: '#fff' }}>
+                                                <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Solar PV (9 kWp)</div>
+                                            </div>
+                                            <div style={{ background: '#3b82f6', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', color: '#fff' }}>
+                                                <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Grid (6 kW limit)</div>
+                                            </div>
+                                            <div style={{ background: '#10b981', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', color: '#fff' }}>
+                                                <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Battery (16 kWh / 8 kW)</div>
+                                            </div>
+                                            <div style={{ background: '#475569', padding: '1.5rem', borderRadius: '12px', textAlign: 'center', color: '#fff' }}>
+                                                <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>Load (Must be served 100%)</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-
-                                {/* 02. OPTIMISE */}
-                                <div className="hero-card" style={s.heroCard}>
-                                    <div style={{ ...s.heroCardTopBar, background: '#3b82f6' }} />
-                                    <div style={s.heroCardNumber}>02</div>
-                                    <div>
-                                        <h2 style={{ ...s.heroCardTitle, color: '#3b82f6' }}>OPTIMISE</h2>
-                                        <span style={s.heroCardSub}>Battery Dispatch</span>
-                                    </div>
-                                    <div className="hero-divider" style={s.heroCardDivider} />
-                                    <p style={s.heroCardDesc}>
-                                        A rolling-horizon Model Predictive Controller solves the optimal charge/discharge schedule every step — buying cheap, selling expensive.
-                                    </p>
-                                </div>
-
-                                {/* 03. EARN */}
-                                <div className="hero-card" style={s.heroCard}>
-                                    <div style={{ ...s.heroCardTopBar, background: '#10b981' }} />
-                                    <div style={s.heroCardNumber}>03</div>
-                                    <div>
-                                        <h2 style={{ ...s.heroCardTitle, color: '#10b981' }}>EARN</h2>
-                                        <span style={s.heroCardSub}>Maximised Savings</span>
-                                    </div>
-                                    <div className="hero-divider" style={s.heroCardDivider} />
-                                    <p style={s.heroCardDesc}>
-                                        The system automatically arbitrages time-of-use tariffs, exports surplus at peak prices, and supports grid emergencies for additional revenue.
-                                    </p>
+                                <div style={{ background: '#1e293b', color: '#fff', padding: '1rem', textAlign: 'center', borderRadius: '8px', marginTop: '3rem', fontWeight: 600 }}>
+                                    The site load must be fully served at every 15-minute interval without exception
                                 </div>
                             </div>
-
-                            <div style={s.heroFooter}>
-                                <div style={s.heroFooterText}>
-                                    AI sends a signal <MoveRight size={16} className="heroFooterArrow" />
-                                    Hardware communicates with all inverters <MoveRight size={16} className="heroFooterArrow" />
-                                    Instant Response
-                                </div>
-                            </div>
-                        </div>
                     )}
 
                     {/* 2. Battery Optimization Viewer / Competition Data Viewer */}
@@ -531,6 +555,7 @@ export default function Dashboard({ isDarkMode }) {
                                 aprilSource={aprilSource}
                                 septSource={septSource}
                                 predictionType={predictionType}
+                                onManualOptimize={handleManualOptimize}
                             />
                         </div>
                     )}

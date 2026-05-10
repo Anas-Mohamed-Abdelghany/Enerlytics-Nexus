@@ -20,8 +20,12 @@ async def run_battery_optimization(request: BatteryOptimizationRequest):
     Run the LP-based battery optimizer for a given forecast horizon.
     """
     try:
+        buy_price = np.array(request.price_forecast)
+        sell_price = np.array(request.sell_price_forecast) if request.sell_price_forecast else buy_price * 0.8
+        
         result = optimize_battery(
-            price_forecast=np.array(request.price_forecast),
+            buy_price=buy_price,
+            sell_price=sell_price,
             load_forecast=np.array(request.load_forecast),
             solar_forecast=np.array(request.solar_forecast),
             soc_init=request.soc_init,
@@ -47,11 +51,15 @@ async def run_rolling_mpc_simulation(request: BatteryOptimizationRequest):
     Simulate a long-term rolling horizon MPC (O(N*LP_solve)).
     """
     try:
-        from core.services.battery_optimizer import rolling_mpc_simulation
-        result = rolling_mpc_simulation(
-            prices=np.array(request.price_forecast),
-            loads=np.array(request.load_forecast),
-            solars=np.array(request.solar_forecast),
+        from core.services.battery_optimizer import rolling_mpc_optimize
+        buy_price = np.array(request.price_forecast)
+        sell_price = np.array(request.sell_price_forecast) if request.sell_price_forecast else buy_price * 0.8
+        
+        result = rolling_mpc_optimize(
+            buy_price=buy_price,
+            sell_price=sell_price,
+            load_forecast=np.array(request.load_forecast),
+            solar_forecast=np.array(request.solar_forecast),
             soc_init=request.soc_init,
             battery_capacity_kwh=request.battery_capacity_kwh or 16.0,
             p_max_kw=request.p_max_kw or 8.0,
@@ -65,6 +73,32 @@ async def run_rolling_mpc_simulation(request: BatteryOptimizationRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+def get_tou_price(ts: datetime) -> float:
+    """
+    Returns the official Italian ToU price for a given timestamp.
+    F1 (Peak): €0.2540 - Mon-Fri 08:00-19:00
+    F2 (Shoulder): €0.2682 - Mon-Fri 07-08 & 19-23 | Sat 07:00-23:00
+    F3 (Off-peak): €0.2440 - All other times (Nights, Sundays)
+    """
+    # Note: Holidays are simplified to F3 per standard practice unless a full holiday list is provided
+    weekday = ts.weekday() # 0=Mon, 5=Sat, 6=Sun
+    hour = ts.hour
+
+    if weekday < 5: # Mon-Fri
+        if 8 <= hour < 19:
+            return 0.2540 # F1
+        elif (7 <= hour < 8) or (19 <= hour < 23):
+            return 0.2682 # F2
+        else:
+            return 0.2440 # F3
+    elif weekday == 5: # Sat
+        if 7 <= hour < 23:
+            return 0.2682 # F2
+        else:
+            return 0.2440 # F3
+    else: # Sun
+        return 0.2440 # F3
+
 @router.post("/audit")
 async def run_audit(request: Dict = None):
     """
@@ -249,6 +283,9 @@ async def run_audit(request: Dict = None):
 
         predictions = np.maximum(0.1, predictions)
         
+        # ENFORCE OFFICIAL Italian ToU Prices for Audit Accuracy
+        buying_prices = np.array([get_tou_price(t) for t in timestamps])
+        
         # Defensive check against NaNs in raw dataset (causes sklearn metric crash)
         valid_idx = ~np.isnan(actuals) & ~np.isnan(predictions)
         if not np.all(valid_idx):
@@ -263,9 +300,7 @@ async def run_audit(request: Dict = None):
 
         metrics = compute_metrics(actuals, predictions)
         
-        overall_errors.extend(np.abs(actuals - predictions))
-        overall_actuals.extend(actuals)
-
+        # Initialize the month results first to avoid KeyError
         results[month_name.lower()] = {
             "period": display_period,
             "source": prediction_source,
@@ -273,6 +308,72 @@ async def run_audit(request: Dict = None):
             "rmse": round(metrics['rmse'], 3),
             "mae": round(metrics['mae'], 3),
             "points": len(actuals),
+            "series": []
+        }
+
+        # RUN BATTERY OPTIMIZATION for the Audit Month
+        try:
+            from core.services.battery_optimizer import rolling_mpc_optimize
+            # Note: We use the PREDICTIONS (load_new) for the controller to stay realistic
+            # but calculate costs using ACTUAL prices if available. 
+            # In the Solship hackathon, we use predicted loads for dispatch decisions.
+            
+            opt_result = rolling_mpc_optimize(
+                buy_price=buying_prices,
+                sell_price=buying_prices * 0.8, # Default export price logic
+                load_forecast=predictions,      # Decisions based on predicted load
+                solar_forecast=solars,
+                soc_init=0.5,
+                battery_capacity_kwh=16.0,
+                p_max_kw=8.0,
+                grid_limit_kw=6.0
+            )
+            
+            # Re-calculate costs using ACTUAL loads for the "True" bill
+            # Cost = (NetGrid * Price) * dt
+            # NetGrid = Load - Solar - BatteryP
+            # BatteryP = Charge + Discharge
+            
+            opt_actions = np.array(opt_result["charge_schedule"]) + np.array(opt_result["discharge_schedule"])
+            net_grid_opt = actuals - solars - opt_actions
+            
+            # Baseline (Battery = 0)
+            net_grid_base = actuals - solars
+            
+            # bill calculation (15 min = 0.25h)
+            dt = 0.25
+            
+            def calc_bill(net_grid, prices):
+                p_imp = np.maximum(0, net_grid)
+                p_exp = np.maximum(0, -net_grid)
+                return np.sum(p_imp * prices - p_exp * (prices * 0.8)) * dt
+
+            optimized_bill = calc_bill(net_grid_opt, buying_prices)
+            baseline_bill = calc_bill(net_grid_base, buying_prices)
+            savings = baseline_bill - optimized_bill
+            
+            results[month_name.lower()]["optimization"] = {
+                "optimized_bill": round(optimized_bill, 2),
+                "baseline_bill": round(baseline_bill, 2),
+                "savings": round(savings, 2),
+                "savings_pct": round((savings / baseline_bill * 100), 2) if baseline_bill > 0 else 0,
+                "schedule": [
+                    {
+                        "ts": timestamps[i],
+                        "action_p_bat": round(float(opt_actions[i]), 3),
+                        "soc": round(float(opt_result["soc_trajectory"][i]), 3),
+                        "cost_eur": round(float((np.maximum(0, net_grid_opt[i]) * buying_prices[i] - np.maximum(0, -net_grid_opt[i]) * (buying_prices[i] * 0.8)) * dt), 4)
+                    } for i in range(len(actuals))
+                ]
+            }
+        except Exception as opt_err:
+            print(f"Audit Optimization failed for {month_name}: {opt_err}")
+            results[month_name.lower()]["optimization"] = {"error": str(opt_err)}
+
+        overall_errors.extend(np.abs(actuals - predictions))
+        overall_actuals.extend(actuals)
+
+        results[month_name.lower()].update({
             "series": [
                 {
                     "ts": timestamps[i],
@@ -284,9 +385,7 @@ async def run_audit(request: Dict = None):
                     "error_pct": round(abs(predictions[i] - actuals[i]) / actuals[i] * 100, 2) if actuals[i] > 0 else 0
                 } for i in range(len(actuals))
             ]
-        }
-
-
+        })
 
     # Calculate overall NRMSE
     if overall_actuals:

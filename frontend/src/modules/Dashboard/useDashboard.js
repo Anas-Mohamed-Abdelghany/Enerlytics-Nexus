@@ -52,9 +52,9 @@ export default function useDashboard(isDarkMode) {
   const [predictionType, setPredictionType] = useState("regression");
   const [predictionHorizon, setPredictionHorizon] = useState("Audit");
   const [trainingWindow, setTrainingWindow] = useState("ALL");
-  const [architecture, setArchitecture] = useState("advanced");
-  const [aprilSource, setAprilSource] = useState("advanced");
-  const [septSource, setSeptSource] = useState("advanced");
+  const [architecture, setArchitecture] = useState("lightgbm");
+  const [aprilSource, setAprilSource] = useState("lightgbm");
+  const [septSource, setSeptSource] = useState("lightgbm");
   const [checkSamples, setCheckSamples] = useState(5);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [marketSentiment, setMarketSentiment] = useState(null);
@@ -250,31 +250,37 @@ export default function useDashboard(isDarkMode) {
       
       let finalResult = { ...resp };
 
-      // If in Advanced mode OR Battery Demo mode, also run the Battery Optimizer automatically
-      if ((architecture === "advanced" || isBatteryDemo) && resp.points) {
+      // RUN BATTERY OPTIMIZER: Always trigger optimization after a forecast to update ROI engine
+      if (resp.points) {
         setStatusMessage("Price forecast ready. Running vectorized LP battery optimizer...");
         
-        // Calculate average load/solar from uploaded data for a more realistic simulation
-        const validLoad = chartData.filter(p => p.load_p != null).map(p => p.load_p);
-        const validSolar = chartData.filter(p => p.pv_p != null).map(p => p.pv_p);
+        // Use real historical averages for a more realistic simulation if real data exists
+        const actuals = chartData.filter(p => !p.is_forecast);
+        const validLoad = actuals.filter(p => p.load_p != null).map(p => p.load_p);
+        const validSolar = actuals.filter(p => p.pv_p != null).map(p => p.pv_p);
         
         const avgLoad = validLoad.length > 0 ? (validLoad.reduce((a,b) => a+b, 0) / validLoad.length) : 2.0;
         const avgSolar = validSolar.length > 0 ? (validSolar.reduce((a,b) => a+b, 0) / validSolar.length) : 1.5;
 
         const mockLoad = Array(resp.points.length).fill(avgLoad);
         const mockSolar = Array(resp.points.length).fill(avgSolar);
+        
         try {
           const optResp = await batteryApi.optimize({
             price_forecast: resp.points.map(p => p.forecast),
             load_forecast: mockLoad,
             solar_forecast: mockSolar,
-            soc_init: 0.5
+            soc_init: 0.5,
+            battery_capacity_kwh: 16.0,
+            p_max_kw: 8.0,
+            grid_limit_kw: 6.0
           });
           finalResult.optimizer = optResp;
           finalResult.load_forecast = mockLoad;
           finalResult.solar_forecast = mockSolar;
         } catch (optErr) {
           console.error("Optimization failed:", optErr);
+          setStatusMessage("Forecast ready, but optimizer failed. ROI results may be stale.");
         }
       }
 
@@ -407,6 +413,50 @@ export default function useDashboard(isDarkMode) {
   };
   const handleAddSubIndicator = (name) => {
     setActiveOscillators(prev => prev.includes(name) ? prev.filter(i => i !== name) : [...prev, name]);
+  };
+
+  const handleManualOptimize = async () => {
+    if (!predictionResult?.points) {
+      setStatusMessage("No active forecast found. Please run 'Predict' first.");
+      return;
+    }
+
+    setStatusMessage("Running manual vectorized LP battery optimization...");
+    
+    const actuals = chartData.filter(p => !p.is_forecast);
+    const validLoad = actuals.filter(p => p.load_p != null).map(p => p.load_p);
+    const validSolar = actuals.filter(p => p.pv_p != null).map(p => p.pv_p);
+    
+    const avgLoad = validLoad.length > 0 ? (validLoad.reduce((a,b) => a+b, 0) / validLoad.length) : 2.0;
+    const avgSolar = validSolar.length > 0 ? (validSolar.reduce((a,b) => a+b, 0) / validSolar.length) : 1.5;
+
+    const mockLoad = Array(predictionResult.points.length).fill(avgLoad);
+    const mockSolar = Array(predictionResult.points.length).fill(avgSolar);
+    
+    try {
+      const optResp = await batteryApi.optimize({
+        buy_price: predictionResult.points.map(p => p.forecast),
+        sell_price: predictionResult.points.map(p => p.forecast).map(v => v * 0.8), // 80% export rate
+        load_forecast: mockLoad,
+        solar_forecast: mockSolar,
+        soc_init: 0.5,
+        battery_capacity_kwh: 16.0,
+        p_max_kw: 8.0,
+        grid_limit_kw: 6.0,
+        eta: 0.94868
+      });
+      
+      setPredictionResult(prev => ({
+        ...prev,
+        optimizer: optResp,
+        load_forecast: mockLoad,
+        solar_forecast: mockSolar
+      }));
+      setStatusMessage("Manual optimization complete. Dashboard updated.");
+    } catch (err) {
+      console.error("Manual optimization failed:", err);
+      setStatusMessage("Manual optimization failed. Please check network/backend.");
+    }
   };
 
   // ── Live Mode Effect ────────────────────────────────────────────────────────
@@ -548,6 +598,7 @@ export default function useDashboard(isDarkMode) {
     handleFile, handleApiFetch, handlePredict, handleStrategy,
     handleBacktest, handleConvert, handleChartTypeChange,
     handleDownloadCSV,
+    handleManualOptimize,
     handleAddMainIndicator, handleAddSubIndicator,
     changeTimeframe, changeInterval,
     isBatteryDemo, setIsBatteryDemo,
