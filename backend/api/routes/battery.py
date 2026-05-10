@@ -188,7 +188,7 @@ async def run_audit(request: Dict = None):
         # Replace the full df with our sliced version for the loop
         df = df_to_audit 
     else:
-        # Detect all months present in the data for the full audit
+        # Detect all months present in the data
         months_in_data = df['timestamp'].dt.month.unique()
         years_in_data = df['timestamp'].dt.year.unique()
         month_map = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 
@@ -200,8 +200,20 @@ async def run_audit(request: Dict = None):
             for m in m_list:
                 found_periods.append((m, yr, month_map[m]))
         
-        # Default: Limit to top 2 for UI
-        found_periods = found_periods[:2]
+        # LOGIC FIX: If specifically requesting the hackathon "Audit", 
+        # filter strictly for months 4 and 9 of the target year.
+        if horizon_val.lower() == "audit":
+            # Filter for months 4 and 9 in any year present, or ideally the target_year
+            audit_periods = [p for p in found_periods if p[0] in [4, 9]]
+            if audit_periods:
+                found_periods = audit_periods
+            else:
+                # If 4/9 not found, keep the first 2 as fallback but print warning
+                print(f"⚠️ Warning: Audit requested for months 4 & 9 but they were not found in the dataset. Available: {months_in_data}")
+                found_periods = found_periods[:2]
+        else:
+            # Default: Limit to top 2 for UI to avoid overloading
+            found_periods = found_periods[:2]
 
     results = {}
     overall_errors = []

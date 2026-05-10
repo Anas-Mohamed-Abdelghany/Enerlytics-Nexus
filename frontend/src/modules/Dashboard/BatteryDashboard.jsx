@@ -185,6 +185,8 @@ export default function BatteryDashboard({
         return;
       }
       setAuditData(data);
+      // Clear manual optimizer result so the Audit scorecard takes priority
+      onManualOptimize && onManualOptimize(null); 
     } catch (e) {
       console.error("Audit failed", e);
     } finally {
@@ -273,11 +275,20 @@ export default function BatteryDashboard({
   */
 
   const stats = useMemo(() => {
-    // Priority 1: Audit Data (if available)
-    if (auditData?.april && auditData?.september) {
-      const totalSavings = (auditData.april.optimization?.savings || 0) + (auditData.september.optimization?.savings || 0);
-      const totalBase = (auditData.april.optimization?.baseline_bill || 0) + (auditData.september.optimization?.baseline_bill || 0);
-      const avgScGain = ((auditData.april.optimization?.sc_gain_pct || 0) + (auditData.september.optimization?.sc_gain_pct || 0)) / 2;
+    // Priority 1: Audit Data (if available) - DYNAMICALLY AGGREGATE ALL MONTHS
+    const auditMonths = auditData ? Object.keys(auditData).filter(k => auditData[k].optimization) : [];
+    if (auditMonths.length > 0) {
+      let totalSavings = 0;
+      let totalBase = 0;
+      let totalScGain = 0;
+      
+      auditMonths.forEach(m => {
+        totalSavings += (auditData[m].optimization?.savings || 0);
+        totalBase += (auditData[m].optimization?.baseline_bill || 0);
+        totalScGain += (auditData[m].optimization?.sc_gain_pct || 0);
+      });
+
+      const avgScGain = totalScGain / auditMonths.length;
       const avgNrmse = auditData.overall_nrmse || 0;
 
       return {
@@ -492,13 +503,12 @@ export default function BatteryDashboard({
 
     let csvRows = [["Timestamp", "Action_P_Bat", "Action", "SoC", "Cost_EUR"]];
 
-    ['april', 'september'].forEach(month => {
-      if (data[month]?.optimization?.schedule) {
-        data[month].optimization.schedule.forEach(row => {
-          const action = row.action_p_bat < -0.1 ? "CHARGE" : row.action_p_bat > 0.1 ? "DISCHARGE" : "IDLE";
-          csvRows.push([row.ts, row.action_p_bat, action, row.soc, row.cost_eur]);
-        });
-      }
+    const auditMonths = Object.keys(data).filter(k => data[k]?.optimization?.schedule);
+    auditMonths.forEach(month => {
+      data[month].optimization.schedule.forEach(row => {
+        const action = row.action_p_bat < -0.1 ? "CHARGE" : row.action_p_bat > 0.1 ? "DISCHARGE" : "IDLE";
+        csvRows.push([row.ts, row.action_p_bat, action, row.soc, row.cost_eur]);
+      });
     });
 
     const csvContent = csvRows.map(row => row.join(",")).join("\n");
@@ -798,27 +808,31 @@ export default function BatteryDashboard({
 
         {!optimizerResult && (auditData || forecastResult?.is_audit) && (
           <div className="audit-bill-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', marginBottom: '1.5rem', border: `1px solid ${THEME.border}` }}>
-            {['april', 'september'].map(month => {
-              const data = auditData?.[month] || forecastResult?.[month];
-              return (
-                <div key={month} style={{ borderRight: month === 'april' ? `1px solid ${THEME.border}` : 'none', paddingRight: month === 'april' ? '1rem' : 0 }}>
-                  <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {month} 2025</h4>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                    <div>
-                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.optimized_bill || 0) >= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (data?.optimization?.optimized_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.optimized_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.optimized_bill || 0).toFixed(2)}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.baseline_bill || 0) >= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 600, color: (data?.optimization?.baseline_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.baseline_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.baseline_bill || 0).toFixed(2)}</div>
-                    </div>
-                  </div>
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: THEME.success, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <TrendingUp size={12} /> Savings: €{data?.optimization?.savings || 0} ({data?.optimization?.savings_pct || 0}%)
-                  </div>
-                </div>
-              )
-            })}
+            {(() => {
+                const dataObj = auditData || (forecastResult?.is_audit ? forecastResult : {});
+                const months = Object.keys(dataObj).filter(k => dataObj[k]?.period);
+                return months.map(month => {
+                    const data = dataObj[month];
+                    return (
+                        <div key={month} style={{ borderRight: month === months[0] && months.length > 1 ? `1px solid ${THEME.border}` : 'none', paddingRight: month === months[0] && months.length > 1 ? '1rem' : 0 }}>
+                            <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {data.period}</h4>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.optimized_bill || 0) >= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (data?.optimization?.optimized_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.optimized_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.optimized_bill || 0).toFixed(2)}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.baseline_bill || 0) >= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: (data?.optimization?.baseline_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.baseline_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.baseline_bill || 0).toFixed(2)}</div>
+                                </div>
+                            </div>
+                            <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: THEME.success, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <TrendingUp size={12} /> Savings: €{data?.optimization?.savings || 0} ({data?.optimization?.savings_pct || 0}%)
+                            </div>
+                        </div>
+                    );
+                });
+            })()}
           </div>
         )}
 
