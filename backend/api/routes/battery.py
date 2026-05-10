@@ -351,12 +351,29 @@ async def run_audit(request: Dict = None):
             optimized_bill = calc_bill(net_grid_opt, buying_prices)
             baseline_bill = calc_bill(net_grid_base, buying_prices)
             savings = baseline_bill - optimized_bill
+
+            # Self-Consumption Index (SCI) Math
+            # Baseline SC: Min(Solar, Load) - what we use naturally
+            # Optimized SC: Min(Solar + Discharge - Charge, Load) - what we use with battery
+            # Note: discharge is positive, charge is negative. 
+            # Energy used from solar = Load - GridImport (clamped to Solar)
             
+            def calc_sc(net_grid, load_vals):
+                import_vals = np.maximum(0, net_grid)
+                return np.sum(load_vals - import_vals) # Energy NOT bought = energy used from solar/battery
+
+            sc_base = calc_sc(net_grid_base, actuals)
+            sc_opt = calc_sc(net_grid_opt, actuals)
+            total_solar = np.sum(solars)
+            
+            sc_gain_pct = ((sc_opt - sc_base) / total_solar * 100) if total_solar > 0 else 0
+
             results[month_name.lower()]["optimization"] = {
                 "optimized_bill": round(optimized_bill, 2),
                 "baseline_bill": round(baseline_bill, 2),
                 "savings": round(savings, 2),
                 "savings_pct": round((savings / baseline_bill * 100), 2) if baseline_bill > 0 else 0,
+                "sc_gain_pct": round(sc_gain_pct, 2),
                 "schedule": [
                     {
                         "ts": timestamps[i],

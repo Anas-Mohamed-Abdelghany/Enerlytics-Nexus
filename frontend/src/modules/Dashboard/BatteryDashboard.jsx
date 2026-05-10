@@ -267,6 +267,26 @@ export default function BatteryDashboard({
 
   const stats = useMemo(() => {
     // Priority 1: Audit Data (if available)
+    if (auditData?.april && auditData?.september) {
+      const totalSavings = (auditData.april.optimization?.savings || 0) + (auditData.september.optimization?.savings || 0);
+      const totalBase = (auditData.april.optimization?.baseline_bill || 0) + (auditData.september.optimization?.baseline_bill || 0);
+      const avgScGain = ((auditData.april.optimization?.sc_gain_pct || 0) + (auditData.september.optimization?.sc_gain_pct || 0)) / 2;
+      const avgNrmse = auditData.overall_nrmse || 0;
+
+      return {
+        savings: totalSavings,
+        savings_pct: totalBase > 0 ? (totalSavings / totalBase * 100) : 0,
+        sc_gain: avgScGain,
+        soc: 50.0,
+        grid: 0,
+        solar: 0,
+        baseline: totalBase,
+        total: totalBase - totalSavings,
+        nrmse: avgNrmse,
+        isCompliant: (totalSavings / totalBase * 100) >= 15.0 && avgNrmse <= 15.0
+      };
+    }
+    
     if (forecastResult?.is_audit && forecastResult.april && forecastResult.september) {
       const a_bill = (forecastResult.Annual_Bill_EUR?.['Baseline A'] || 0) + (forecastResult.Annual_Bill_EUR?.['Baseline B'] || 0);
       const ctrl_bill = (forecastResult.Annual_Bill_EUR?.['Your Controller'] || 0) * 2; // Approximate annual
@@ -661,18 +681,22 @@ export default function BatteryDashboard({
                 <div key={month} className="audit-month-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', border: `1px solid ${THEME.border}` }}>
                   <h4 style={{ textTransform: 'uppercase', color: THEME.solar, marginBottom: '0.25rem' }}>{auditData[month].period} Window</h4>
                   <div style={{ fontSize: '0.7rem', color: THEME.solar, opacity: 0.7, marginBottom: '1rem', fontStyle: 'italic' }}>Engine: {auditData[month].source}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
                     <div className="audit-stat">
                       <div style={{ fontSize: '0.7rem', color: THEME.textSecondary }}>RMSE (kW)</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{auditData[month].rmse}</div>
-                    </div>
-                    <div className="audit-stat">
-                      <div style={{ fontSize: '0.7rem', color: THEME.textSecondary }}>MAE (kW)</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{auditData[month].mae}</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{auditData[month].rmse}</div>
                     </div>
                     <div className="audit-stat">
                       <div style={{ fontSize: '0.7rem', color: THEME.textSecondary }}>NRMSE (%)</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: THEME.solar }}>{auditData[month].nrmse}%</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: THEME.solar }}>{auditData[month].nrmse}%</div>
+                    </div>
+                    <div className="audit-stat">
+                      <div style={{ fontSize: '0.7rem', color: THEME.textSecondary }}>Savings (€)</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: THEME.success }}>€{auditData[month].optimization?.savings}</div>
+                    </div>
+                    <div className="audit-stat">
+                      <div style={{ fontSize: '0.7rem', color: THEME.textSecondary }}>SC Gain</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: THEME.accent }}>+{auditData[month].optimization?.sc_gain_pct}%</div>
                     </div>
                   </div>
                   <button
