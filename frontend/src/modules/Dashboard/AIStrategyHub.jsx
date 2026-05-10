@@ -36,12 +36,12 @@ export default function AIStrategyHub({
         <div style={s.settingsGroup}>
           <div style={s.groupLabel}>Prediction Interval</div>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            {[3, 7, 14, 30, 90, "Audit"].map(h => (
+            {[3, 7, 14, 30, 90, "Audit", "Month 3 Audit"].map(h => (
               <label key={h} className="radio-chip" style={{ ...s.radioLabel, ...(predictionHorizon === h ? s.radioLabelActive : {}) }}>
                 <input type="radio" name="predictionHorizon" value={h} checked={predictionHorizon === h}
-                  onChange={(e) => setPredictionHorizon(e.target.value === "Audit" ? "Audit" : parseInt(e.target.value))} style={s.radioHidden} />
+                  onChange={(e) => setPredictionHorizon(isNaN(parseInt(e.target.value)) ? e.target.value : parseInt(e.target.value))} style={s.radioHidden} />
                 <span style={{ ...s.radioText, ...(predictionHorizon === h ? s.radioTextActive : {}) }}>
-                  {h === 3 ? "3 Days" : h === 7 ? "7 Days" : h === 14 ? "14 Days" : h === 30 ? "30 Days" : h === 90 ? "90 Days" : "Month 4 & 9 Audit"}
+                  {h === 3 ? "3 Days" : h === 7 ? "7 Days" : h === 14 ? "14 Days" : h === 30 ? "30 Days" : h === 90 ? "90 Days" : h === "Audit" ? "Month 4 & 9 Audit" : "Month 3 Audit"}
                 </span>
               </label>
             ))}

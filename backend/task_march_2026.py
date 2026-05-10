@@ -67,11 +67,16 @@ async def run_march_task():
     legacy_metrics = compute_metrics(actuals, legacy_preds)
 
     # --- PHASE 2: TRAIN & EVALUATE NEW MODEL ---
-    print("\n🤖 Step 2: Training NEW Model (In-Memory Only)...")
+    print("\n🤖 Step 2: Training NEW Model (Discovering all 52+ features)...")
     
     # We perform a manual training loop here to avoid overwriting your production .pkl files
-    X_train_feat = forecaster.build_energy_features(df_train.set_index('timestamp'))
-    train_features = forecaster.feature_names
+    X_train_feat = forecaster.build_energy_features(df_train.set_index('timestamp')).dropna()
+    
+    # DISCOVER ALL FEATURES: Exclude target and raw data columns
+    exclude_cols = ['load', 'solar', 'price', 'battery_p', 'grid_p', 'timestamp', 'load_p', 'pv_p', 'Selling_price_eur_kwh', 'is_holiday']
+    train_features = [c for c in X_train_feat.columns if c not in exclude_cols]
+    
+    print(f"✅ Discovered {len(train_features)} features in the current logic.")
     
     X_train = X_train_feat[train_features]
     y_train = X_train_feat['load']
@@ -84,7 +89,7 @@ async def run_march_task():
     new_model = LGBMRegressor(n_estimators=100, learning_rate=0.05, verbose=-1)
     new_model.fit(X_train_scaled, y_train)
     
-    # New Prediction for March
+    # New Prediction for March (Must use the newly discovered features)
     X_new_scaled = new_scaler.transform(X_test_feat[train_features])
     new_preds = new_model.predict(X_new_scaled)
     new_metrics = compute_metrics(actuals, new_preds)
@@ -107,6 +112,33 @@ async def run_march_task():
         'new_pred': new_preds
     })
     results_df.to_csv("march_2026_comparison_results.csv", index=False)
+
+    # --- PHASE 4: PROMOTE TO PRODUCTION ---
+    print("\n" + "="*50)
+    print("🚀 PROMOTING TO PRODUCTION")
+    print("-" * 50)
+    
+    # Save the new model and scaler to the official models folder
+    # This fixes the 'Feature names unseen at fit time' error in the web app
+    model_export_path = "models/lgbm_load.pkl"
+    scaler_export_path = "models/scaler.pkl"
+    
+    # Ensure directory exists
+    os.makedirs("models", exist_ok=True)
+    
+    # Save Model (using the dict format the service expects)
+    joblib.dump({
+        'model': new_model,
+        'feature_names': train_features
+    }, model_export_path)
+    
+    # Save Scaler
+    joblib.dump(new_scaler, scaler_export_path)
+    
+    print(f"✅ SUCCESSFULLY SAVED: {model_export_path}")
+    print(f"✅ SUCCESSFULLY SAVED: {scaler_export_path}")
+    print("✨ Your Web Dashboard is now synced with the 53-feature logic!")
+    print("="*50)
 
     # 8. Visualization
     print("\n📈 Generating comparison plot...")

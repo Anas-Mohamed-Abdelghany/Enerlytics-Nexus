@@ -78,29 +78,42 @@ class EnergyForecaster:
         Feature Engineering for LOAD and SOLAR forecasting.
         """
         df = df.copy()
-        # Clean column names
+        # Clean whitespace and remove duplicate columns
         df.columns = [c.strip() for c in df.columns]
+        df = df.loc[:, ~df.columns.duplicated()]
         
         # Normalize column names for robust inference
+        # We drop any existing targets if they would cause a duplicate name collision
         if 'Selling_price_eur_kwh' in df.columns:
+            if 'price' in df.columns: df = df.drop(columns=['price'])
             df = df.rename(columns={'Selling_price_eur_kwh': 'price'})
         elif 'selling_price' in df.columns:
+            if 'price' in df.columns: df = df.drop(columns=['price'])
             df = df.rename(columns={'selling_price': 'price'})
-        elif 'close' in df.columns:
-            df = df.rename(columns={'close': 'price'})
             
         if 'load_p' in df.columns:
+            if 'load' in df.columns: df = df.drop(columns=['load'])
             df = df.rename(columns={'load_p': 'load'})
         if 'pv_p' in df.columns:
+            if 'solar' in df.columns: df = df.drop(columns=['solar'])
             df = df.rename(columns={'pv_p': 'solar'})
 
         print(f"DEBUG: Shape: {df.shape}, Columns: {list(df.columns)}")
-        
+        # Ensure the index is a DatetimeIndex
         if not isinstance(df.index, pd.DatetimeIndex):
             df.index = pd.to_datetime(df.index, errors='coerce')
         
         # Drop rows where index could not be parsed
         df = df[df.index.notnull()]
+
+        # Temporal Shield: Remove duplicate timestamps which cause 'ta' library crashes
+        if df.index.duplicated().any():
+            dupes = df.index.duplicated().sum()
+            print(f"⚠️ Warning: Found {dupes} duplicate timestamps. Dropping them to stabilize analysis.")
+            df = df[~df.index.duplicated(keep='first')]
+        
+        # Ensure sorted index
+        df = df.sort_index()
 
         # 1. Time features (Sin/Cos + Fourier)
         df['hour_sin'] = np.sin(2 * np.pi * df.index.hour / 24)

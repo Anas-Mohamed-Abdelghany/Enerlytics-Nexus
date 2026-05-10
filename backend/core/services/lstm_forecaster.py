@@ -12,6 +12,9 @@ from tensorflow.keras.utils import to_categorical
 from models.schemas import ForecastPoint, OHLCVPoint
 from core.services.battery_service import simulate_soc_timeline
 
+# Silence pandas downcasting warnings
+pd.set_option('future.no_silent_downcasting', True)
+
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'volume': 'Volume'}, inplace=True)
@@ -114,7 +117,8 @@ def validate_model(model, data, features, scaler, target_scaler, prediction_type
     indices.sort()
     
     for idx in indices:
-        input_data = data[features].iloc[idx-lookback:idx].ffill().bfill().fillna(0)
+        # Use the newer infer_objects to avoid downcasting warnings
+        input_data = data[features].iloc[idx-lookback:idx].ffill().bfill().fillna(0).infer_objects(copy=False)
         scaled_input = scaler.transform(input_data).reshape(1, lookback, len(features))
         prediction = model.predict(scaled_input, verbose=0)
         ts = data['timestamp'].iloc[idx]
@@ -144,7 +148,7 @@ def calculate_horizon_sensitivity(model, data, features, scaler, target_scaler, 
     for h in horizons:
         errors = []
         for idx in test_indices:
-            input_data = data[features].iloc[idx-lookback:idx].ffill().bfill().fillna(0)
+            input_data = data[features].iloc[idx-lookback:idx].ffill().bfill().fillna(0).infer_objects(copy=False)
             current_batch = scaler.transform(input_data).reshape(1, lookback, len(features))
             preds = []
             for _ in range(h):
@@ -163,7 +167,7 @@ def calculate_horizon_sensitivity(model, data, features, scaler, target_scaler, 
     return sensitivity
 
 def predict_future(model, data, features_to_use, scaler, target_scaler, prediction_type, lookback=60, future_days=30):
-    last_lookback_days = data[features_to_use][-lookback:].ffill().bfill().fillna(0)
+    last_lookback_days = data[features_to_use][-lookback:].ffill().bfill().fillna(0).infer_objects(copy=False)
     scaled_inputs = scaler.transform(last_lookback_days)
     if prediction_type == 'regression':
         predictions = []

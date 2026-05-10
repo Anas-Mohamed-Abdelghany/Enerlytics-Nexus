@@ -154,6 +154,7 @@ export default function BatteryDashboard({
   aprilSource,
   septSource,
   predictionType,
+  predictionHorizon,
   onManualOptimize
 }) {
   const [replayStep, setReplayStep] = useState(0);
@@ -173,7 +174,8 @@ export default function BatteryDashboard({
           architecture: architecture,
           aprilSource: aprilSource,
           septSource: septSource,
-          prediction_type: predictionType
+          prediction_type: predictionType,
+          horizon: predictionHorizon || timeframe
         })
       });
       const data = await resp.json();
@@ -199,16 +201,21 @@ export default function BatteryDashboard({
       ["Model Architecture", "DirectMultiStep-LGBM-v2"],
       [],
       ["--- SUMMARY METRICS ---"],
-      ["Period", "RMSE", "MAE/MAPE", "NRMSE", "Data Points"],
-      [auditData.april.period, auditData.april.rmse, auditData.april.mae, auditData.april.nrmse, auditData.april.points],
-      [auditData.september.period, auditData.september.rmse, auditData.september.mae, auditData.september.nrmse, auditData.september.points],
-      ["AGGREGATE PERFORMANCE", "", "", auditData.overall_nrmse + "%"],
-      [],
-      ["--- DETAILED HOURLY AUDIT DATA ---"],
-      ["Period", "Timestamp", "load_p", "load_new", "pv_p", "selling_price_eur_kwh", "Delta (kW)", "MAE/MAPE", "RMSE", "NRMSE"]
+      ["Period", "RMSE", "MAE/MAPE", "NRMSE", "Data Points"]
     ];
 
-    ['april', 'september'].forEach(month => {
+    Object.keys(auditData).forEach(key => {
+      if (key !== 'overall_nrmse' && auditData[key].period) {
+        const m = auditData[key];
+        csvRows.push([m.period, m.rmse, m.mae, m.nrmse, m.points]);
+      }
+    });
+
+    csvRows.push(["AGGREGATE PERFORMANCE", "", "", auditData.overall_nrmse + "%"]);
+    csvRows.push([], ["--- DETAILED HOURLY AUDIT DATA ---"]);
+    csvRows.push(["Period", "Timestamp", "load_p", "load_new", "pv_p", "selling_price_eur_kwh", "Delta (kW)", "MAE/MAPE", "RMSE", "NRMSE"]);
+
+    Object.keys(auditData).forEach(month => {
       if (auditData[month].series) {
         auditData[month].series.forEach(p => {
           const absError = Math.abs(p.load_p - p.load_new);
@@ -222,7 +229,7 @@ export default function BatteryDashboard({
             p.selling_price_eur_kwh,
             p.delta,
             absError.toFixed(4),
-            Math.sqrt(sqError).toFixed(4), // This is RMSE for a single point (same as absolute error)
+            Math.sqrt(sqError).toFixed(4),
             p.error_pct + "%"
           ]);
         });
@@ -286,7 +293,7 @@ export default function BatteryDashboard({
         isCompliant: (totalSavings / totalBase * 100) >= 15.0 && avgNrmse <= 15.0
       };
     }
-    
+
     if (forecastResult?.is_audit && forecastResult.april && forecastResult.september) {
       const a_bill = (forecastResult.Annual_Bill_EUR?.['Baseline A'] || 0) + (forecastResult.Annual_Bill_EUR?.['Baseline B'] || 0);
       const ctrl_bill = (forecastResult.Annual_Bill_EUR?.['Your Controller'] || 0) * 2; // Approximate annual
@@ -516,44 +523,8 @@ export default function BatteryDashboard({
 
   return (
     <div className="bloomberg-dashboard">
-      {/* 1. Hero KPI Row - Now Horizontal at the Top */}
-      <div className="hero-row">
-        <KPICard title="Savings Today" value={`€${stats.savings.toFixed(2)}`} icon={<DollarSign size={22} />} color={THEME.success} sparkData={optimizerResult?.soc_trajectory || []} trend={stats.savings_pct} />
-        <KPICard title="Current SOC" value={`${stats.soc.toFixed(1)}%`} icon={<Battery size={22} />} color={stats.soc > 50 ? THEME.success : stats.soc > 20 ? THEME.warning : THEME.danger} sparkData={optimizerResult?.soc_trajectory || []} />
-        <KPICard title="Grid Import Now" value={`${stats.grid.toFixed(2)} kW`} icon={<Zap size={22} />} color={THEME.accent} sparkData={optimizerResult?.grid_import || historicalData?.map(d => d.grid_p) || []} />
-        <KPICard title="Solar Generation" value={`${stats.solar.toFixed(2)} kW`} icon={<Sun size={22} />} color={THEME.solar} sparkData={forecastResult?.solar_forecast || historicalData?.map(d => d.pv_p) || []} />
 
-        {/* 1.1 New System Constraints Panel */}
-        <div className="bloomberg-card constraints-card" style={{ borderLeft: `4px solid ${THEME.accent}` }}>
-          <div className="card-header" style={{ marginBottom: '0.5rem' }}>
-            <span className="card-title" style={{ color: THEME.accent, fontWeight: 800 }}>SYSTEM LIMITS</span>
-            <Info size={16} color={THEME.textSecondary} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.75rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: THEME.textSecondary }}>Capacity</span>
-              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>16.0 kWh</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: THEME.textSecondary }}>Max Power</span>
-              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>8.0 kW</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: THEME.textSecondary }}>Grid Limit</span>
-              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>6.0 kW</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ color: THEME.textSecondary }}>Round-trip η</span>
-              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>90%</span>
-            </div>
-          </div>
-          <div style={{ marginTop: '0.75rem', padding: '0.4rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', textAlign: 'center' }}>
-            <span style={{ color: THEME.textSecondary, fontSize: '0.65rem' }}>Initial SoC: <strong style={{ color: THEME.success }}>50%</strong></span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Main Orchestration Chart - Now Below KPIs and Full Width */}
+      {/* 2. Main Orchestration Chart */}
       <div className="main-panel chart-panel">
         <div className="panel-header-row">
           <div className="panel-title-group">
@@ -608,13 +579,6 @@ export default function BatteryDashboard({
         />
       </div>
 
-      <AccuracyReport
-        nrmse={11.42}
-        mae={0.42}
-        rmse={0.61}
-        generalization={1.15}
-      />
-
 
       {/* 4. Price Heatmap */}
       <div className="main-panel heatmap-panel">
@@ -637,47 +601,70 @@ export default function BatteryDashboard({
         />
       </div>
 
-      {/* 3. Official Audit Scorecard */}
-      <div className="main-panel audit-panel" style={{ border: `2px solid ${THEME.solar}44`, background: `${THEME.solar}05`, marginBottom: '1.5rem' }}>
-        <div className="panel-header-row">
+      {/* 3. Dynamic Audit Scorecard */}
+      <div className="main-panel audit-panel" style={{ border: `2px solid ${THEME.solar}44`, background: `${THEME.solar}05`, marginBottom: '1.5rem', padding: '1.5rem' }}>
+        <div className="panel-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <div className="panel-title-group">
-            <TrendingUp size={18} color={THEME.solar} />
-            <h3>Check Accuracy</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <TrendingUp size={24} color={THEME.solar} />
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.25rem', color: THEME.solar }}>
+                  {auditData ? `Audit Summary: ${Object.keys(auditData).filter(k => auditData[k].period).map(k => auditData[k].period).join(' & ')}` : "High-Precision AI Performance Audit"}
+                </h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.6 }}>
+                  {auditData ? "Validated performance metrics for the active data window." : "Validate energy forecasting accuracy and generate audit-ready reports for any selected timeframe."}
+                </p>
+              </div>
+            </div>
           </div>
+
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             {auditData && (
-              <>
-                <button className="action-btn" onClick={handleDownloadAuditReport} style={{ background: 'transparent', border: `1px solid ${THEME.solar}`, color: THEME.solar }}>
-                  <Download size={14} /> Download Audit Report
-                </button>
-                <span className="badge" style={{ background: THEME.solar, color: THEME.bg }}>NRMSE: {auditData.overall_nrmse}%</span>
-              </>
+              <button className="action-btn" onClick={handleDownloadAuditReport} style={{ background: 'transparent', border: `1px solid ${THEME.solar}`, color: THEME.solar, padding: '0.5rem 1rem', borderRadius: '6px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Download size={14} /> Download Report
+              </button>
             )}
-            <button className={`action-btn primary ${isAuditing ? 'loading' : ''}`} onClick={handleRunAudit} disabled={isAuditing} style={{ background: THEME.solar }}>
-              <Zap size={14} /> {isAuditing ? "Auditing System..." : (auditData ? "Re-run Accuracy Check" : "Check Accuracy")}
+            <button
+              className={`action-btn ${isAuditing ? 'loading' : ''}`}
+              onClick={handleRunAudit}
+              disabled={isAuditing || !historicalData?.length}
+              style={{ background: THEME.solar, color: THEME.bg, padding: '0.6rem 1.25rem', borderRadius: '6px', fontWeight: 600, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <Zap size={16} /> {isAuditing ? "Auditing..." : (auditData ? "Re-run Accuracy Check" : "Run Accuracy Audit")}
             </button>
+            {auditData && <span className="badge" style={{ background: THEME.solar, color: THEME.bg, padding: '0.4rem 0.8rem', borderRadius: '4px', fontWeight: 700 }}>NRMSE: {auditData.overall_nrmse}%</span>}
           </div>
         </div>
 
         {!auditData && !isAuditing && (
           <div style={{ textAlign: 'center', padding: '3rem', color: THEME.textSecondary }}>
             <Target size={40} opacity={0.2} style={{ marginBottom: '1rem', margin: '0 auto' }} />
-            <p>Official validation for April and September 2025 windows.</p>
-            <p style={{ fontSize: '0.8rem' }}>Click "Execute Competition Audit" above to verify Site 1 Accuracy and generate submission reports.</p>
+            <p>Ready for Performance Validation.</p>
+            <p style={{ fontSize: '0.8rem' }}>Click "Run Accuracy Audit" above to analyze the loaded dataset and generate detailed accuracy reports.</p>
           </div>
         )}
 
         {isAuditing && (
           <div style={{ textAlign: 'center', padding: '3rem' }}>
             <div className="spin" style={{ width: '40px', height: '40px', border: '3px solid rgba(255,191,0,0.2)', borderTopColor: THEME.solar, borderRadius: '50%', margin: '0 auto 1rem' }} />
-            <p style={{ color: THEME.solar, fontWeight: 600 }}>Crunching 5,760 data points...</p>
+            <p style={{ color: THEME.solar, fontWeight: 600 }}>
+              Crunching {
+                (() => {
+                  const activeTF = predictionHorizon || timeframe;
+                  if (activeTF === 'Audit' || activeTF === 'ALL' || !historicalData) return historicalData?.length?.toLocaleString();
+                  const map = { "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "Month 3 Audit": 31 };
+                  const days = map[activeTF] || parseInt(activeTF) || 30;
+                  return Math.min(historicalData.length, days * 96).toLocaleString();
+                })()
+              } data points...
+            </p>
           </div>
         )}
 
         {auditData && (
           <>
-            <div className="audit-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
-              {['april', 'september'].map(month => (
+            <div className="audit-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginTop: '1rem' }}>
+              {Object.keys(auditData).filter(k => auditData[k].period).map(month => (
                 <div key={month} className="audit-month-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', border: `1px solid ${THEME.border}` }}>
                   <h4 style={{ textTransform: 'uppercase', color: THEME.solar, marginBottom: '0.25rem' }}>{auditData[month].period} Window</h4>
                   <div style={{ fontSize: '0.7rem', color: THEME.solar, opacity: 0.7, marginBottom: '1rem', fontStyle: 'italic' }}>Engine: {auditData[month].source}</div>
@@ -780,11 +767,36 @@ export default function BatteryDashboard({
                 <Zap size={14} /> Run Optimization
               </button>
             )}
-            <button className="action-btn primary" onClick={handleExport}><Download size={14} /> Export Current View</button>
+            <button className="action-btn primary" onClick={onManualOptimize} style={{ background: THEME.solar, color: THEME.bg, border: 'none' }}>
+              <Zap size={14} /> Calculate Battery Optimization
+            </button>
           </div>
         </div>
 
-        {(auditData || forecastResult?.is_audit) && (
+        {/* Dynamic ROI Summary - shows manual optimizer or audit months */}
+        {optimizerResult && (
+          <div className="audit-bill-summary" style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem', padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', marginBottom: '1.5rem', border: `1px solid ${THEME.border}` }}>
+            <div>
+              <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {predictionHorizon || 'Current View'}</h4>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(optimizerResult.total_cost_eur || 0) >= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (optimizerResult.total_cost_eur || 0) >= 0 ? THEME.success : THEME.danger }}>{(optimizerResult.total_cost_eur || 0) < 0 ? '-' : ''}€{Math.abs(optimizerResult.total_cost_eur || 0).toFixed(2)}</div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>Savings</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 700, color: THEME.success }}>€{Math.abs(optimizerResult.savings_eur || 0).toFixed(2)} ({Math.abs(optimizerResult.savings_pct || 0).toFixed(1)}%)</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(optimizerResult.baseline_cost_eur || 0) >= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 600, color: (optimizerResult.baseline_cost_eur || 0) >= 0 ? THEME.success : THEME.danger }}>{(optimizerResult.baseline_cost_eur || 0) < 0 ? '-' : ''}€{Math.abs(optimizerResult.baseline_cost_eur || 0).toFixed(2)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!optimizerResult && (auditData || forecastResult?.is_audit) && (
           <div className="audit-bill-summary" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', marginBottom: '1.5rem', border: `1px solid ${THEME.border}` }}>
             {['april', 'september'].map(month => {
               const data = auditData?.[month] || forecastResult?.[month];
@@ -793,12 +805,12 @@ export default function BatteryDashboard({
                   <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {month} 2025</h4>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                     <div>
-                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>Optimized Bill</div>
-                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: THEME.success }}>€{data?.optimization?.optimized_bill || 0}</div>
+                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.optimized_bill || 0) >= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
+                      <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (data?.optimization?.optimized_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.optimized_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.optimized_bill || 0).toFixed(2)}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>Baseline (No Battery)</div>
-                      <div style={{ fontSize: '1rem', fontWeight: 600, opacity: 0.8 }}>€{data?.optimization?.baseline_bill || 0}</div>
+                      <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.baseline_bill || 0) >= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
+                      <div style={{ fontSize: '1rem', fontWeight: 600, color: (data?.optimization?.baseline_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.baseline_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.baseline_bill || 0).toFixed(2)}</div>
                     </div>
                   </div>
                   <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: THEME.success, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -815,31 +827,59 @@ export default function BatteryDashboard({
             <thead><tr><th>Time</th><th>Action</th><th>Power (kW)</th><th>Price (€)</th><th>End SOC</th><th>P&L</th></tr></thead>
             <tbody>
               {(() => {
-                const activeAuditData = auditData?.[expandedMonth || 'april'] || forecastResult?.[expandedMonth || 'april'];
-                const rows = activeAuditData?.optimization?.schedule ? activeAuditData.optimization.schedule.slice(0, 48) : (optimizerResult?.timestamps?.slice(0, 48) || historicalData?.slice(0, 48) || []);
+                const auditKeys = auditData ? Object.keys(auditData).filter(k => auditData[k].period) : [];
+                const defaultKey = auditKeys.length > 0 ? auditKeys[0] : 'april';
+                const activeMonth = expandedMonth || defaultKey;
+                const activeAuditData = auditData?.[activeMonth] || forecastResult?.[activeMonth];
 
-                return rows.map((data, i) => {
-                  const isAuditRow = !!data.ts;
-                  const t = isAuditRow ? data.ts : (optimizerResult ? data : data.timestamp);
+                let rows = [];
+                let isManual = false;
+                if (optimizerResult && optimizerResult.charge_schedule) {
+                  rows = optimizerResult.charge_schedule.slice(0, 96);
+                  isManual = true;
+                } else if (activeAuditData?.optimization?.schedule) {
+                  rows = activeAuditData.optimization.schedule.slice(0, 96);
+                } else if (activeAuditData?.optimization?.charge_schedule) {
+                  rows = activeAuditData.optimization.charge_schedule.slice(0, 96);
+                }
 
-                  const charge = isAuditRow ? (data.action_p_bat < 0 ? data.action_p_bat : 0) : (optimizerResult?.charge_schedule?.[i] || (historicalData?.[i]?.battery_p < 0 ? historicalData?.[i]?.battery_p : 0));
-                  const discharge = isAuditRow ? (data.action_p_bat > 0 ? data.action_p_bat : 0) : (optimizerResult?.discharge_schedule?.[i] || (historicalData?.[i]?.battery_p > 0 ? historicalData?.[i]?.battery_p : 0));
+                return rows.map((_, i) => {
+                  let t, charge, discharge, price, soc, pnl;
 
-                  const action = charge < -0.1 ? "CHARGE" : discharge > 0.1 ? "DISCHARGE" : "IDLE";
+                  if (isManual) {
+                    // Manual optimization: read everything by index from optimizerResult
+                    t = optimizerResult.timestamps?.[i];
+                    charge = optimizerResult.charge_schedule?.[i] || 0;
+                    discharge = optimizerResult.discharge_schedule?.[i] || 0;
+                    price = priceHistory?.prices?.[i] || 0;
+                    soc = optimizerResult.soc_trajectory?.[i] || 0;
+                    pnl = (optimizerResult.grid_import?.[i] || 0) * price * 0.25 * -1
+                      + (optimizerResult.grid_export?.[i] || 0) * price * 0.8 * 0.25;
+                  } else {
+                    // Audit row from backend schedule
+                    const data = rows[i];
+                    const isScheduleRow = !!data?.ts;
+                    t = isScheduleRow ? data.ts : activeAuditData?.timestamps?.[i];
+                    charge = isScheduleRow ? (data.action_p_bat < 0 ? -data.action_p_bat : 0) : (activeAuditData?.optimization?.charge_schedule?.[i] || 0);
+                    discharge = isScheduleRow ? (data.action_p_bat > 0 ? data.action_p_bat : 0) : (activeAuditData?.optimization?.discharge_schedule?.[i] || 0);
+                    price = isScheduleRow ? (activeAuditData?.series?.[i]?.selling_price_eur_kwh || 0) : (activeAuditData?.prices?.[i] || 0);
+                    soc = isScheduleRow ? data.soc : (activeAuditData?.optimization?.soc?.[i] || 0);
+                    pnl = isScheduleRow ? data.cost_eur : ((discharge - charge) * price * 0.25);
+                  }
+
+                  if (!t) return null;
+
+                  const action = charge > 0.05 ? "CHARGE" : discharge > 0.05 ? "DISCHARGE" : "IDLE";
                   const rowStyle = action === "CHARGE" ? 'row-charge' : action === "DISCHARGE" ? 'row-discharge' : 'row-idle';
-
-                  const price = isAuditRow ? (activeAuditData?.series?.[i]?.selling_price_eur_kwh || 0) : (priceHistory?.prices?.[i] || 0);
-                  const soc = isAuditRow ? data.soc : (optimizerResult?.soc_trajectory?.[i] || (historicalData?.[i]?.soc_reconstructed || 0));
-                  const pnl = isAuditRow ? data.cost_eur : ((charge + discharge) * price * 0.25);
 
                   return (
                     <tr key={i} className={rowStyle} style={{ opacity: isReplaying && i > replayStep ? 0.3 : 1 }}>
                       <td>{new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
                       <td><span className={`badge ${action.toLowerCase()}`}>{action}</span></td>
-                      <td className="mono">{(charge + discharge).toFixed(3)}</td>
+                      <td className="mono">{(charge > discharge ? charge : discharge).toFixed(3)}</td>
                       <td className="mono">€{price.toFixed(3)}</td>
                       <td className="mono">{(soc * 100).toFixed(1)}%</td>
-                      <td className={`mono pnl ${pnl < 0 ? 'plus' : ''}`}>
+                      <td className={`mono pnl ${pnl >= 0 ? 'plus' : ''}`}>
                         {pnl.toFixed(4)}€
                       </td>
                     </tr>
@@ -848,6 +888,42 @@ export default function BatteryDashboard({
               })()}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* KPI Results Row - Updated after optimization */}
+      <div className="hero-row">
+        <KPICard title="Savings Today" value={`€${stats.savings.toFixed(2)}`} icon={<DollarSign size={22} />} color={THEME.success} sparkData={optimizerResult?.soc_trajectory || []} trend={stats.savings_pct} />
+        <KPICard title="Current SOC" value={`${stats.soc.toFixed(1)}%`} icon={<Battery size={22} />} color={stats.soc > 50 ? THEME.success : stats.soc > 20 ? THEME.warning : THEME.danger} sparkData={optimizerResult?.soc_trajectory || []} />
+        <KPICard title="Grid Import Now" value={`${stats.grid.toFixed(2)} kW`} icon={<Zap size={22} />} color={THEME.accent} sparkData={optimizerResult?.grid_import || historicalData?.map(d => d.grid_p) || []} />
+        <KPICard title="Solar Generation" value={`${stats.solar.toFixed(2)} kW`} icon={<Sun size={22} />} color={THEME.solar} sparkData={forecastResult?.solar_forecast || historicalData?.map(d => d.pv_p) || []} />
+
+        <div className="bloomberg-card constraints-card" style={{ borderLeft: `4px solid ${THEME.accent}` }}>
+          <div className="card-header" style={{ marginBottom: '0.5rem' }}>
+            <span className="card-title" style={{ color: THEME.accent, fontWeight: 800 }}>SYSTEM LIMITS</span>
+            <Info size={16} color={THEME.textSecondary} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.75rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: THEME.textSecondary }}>Capacity</span>
+              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>16.0 kWh</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: THEME.textSecondary }}>Max Power</span>
+              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>8.0 kW</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: THEME.textSecondary }}>Grid Limit</span>
+              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>6.0 kW</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: THEME.textSecondary }}>Round-trip η</span>
+              <span style={{ color: THEME.textPrimary, fontWeight: 700 }}>90%</span>
+            </div>
+          </div>
+          <div style={{ marginTop: '0.75rem', padding: '0.4rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', textAlign: 'center' }}>
+            <span style={{ color: THEME.textSecondary, fontSize: '0.65rem' }}>Initial SoC: <strong style={{ color: THEME.success }}>50%</strong></span>
+          </div>
         </div>
       </div>
 

@@ -135,6 +135,6 @@ export const utilsApi = {
 export const batteryApi = {
   optimize: (data) =>
     post("/api/battery/optimize", data),
-  audit: (data, architecture = "advanced", aprilSource = "advanced", septSource = "advanced") =>
-    post("/api/battery/audit", { data, architecture, aprilSource, septSource }),
+  audit: (data, architecture = "advanced", aprilSource = "advanced", septSource = "advanced", horizon = "audit") =>
+    post("/api/battery/audit", { data, architecture, aprilSource, septSource, horizon }),
 };

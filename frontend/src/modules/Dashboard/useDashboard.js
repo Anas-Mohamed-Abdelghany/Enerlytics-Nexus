@@ -228,9 +228,9 @@ export default function useDashboard(isDarkMode) {
       }
 
       let resp;
-      if (predictionHorizon === "Audit") {
-        setStatusMessage("Running Official 2025 Audit on live data...");
-        resp = await batteryApi.audit(trainingData, architecture, aprilSource, septSource); // Calls the /audit endpoint with authentic data
+      if (predictionHorizon === "Audit" || predictionHorizon === "Month 3 Audit") {
+        setStatusMessage(`Running ${predictionHorizon} on live data...`);
+        resp = await batteryApi.audit(trainingData, architecture, aprilSource, septSource, predictionHorizon); 
         // Map audit results to a format the UI expects if necessary
         setStatusMessage("Official 2025 Audit for April and September complete. Displaying Scorecard...");
         setPredictionResult({ ...resp, is_audit: true });
@@ -416,29 +416,27 @@ export default function useDashboard(isDarkMode) {
   };
 
   const handleManualOptimize = async () => {
-    if (!predictionResult?.points) {
-      setStatusMessage("No active forecast found. Please run 'Predict' first.");
+    const hasForecast = predictionResult?.points?.length > 0;
+    const hasHistorical = chartData?.length > 0;
+
+    if (!hasForecast && !hasHistorical) {
+      setStatusMessage("No data available to optimize. Please upload a file or run a forecast.");
       return;
     }
 
-    setStatusMessage("Running manual vectorized LP battery optimization...");
+    setStatusMessage("Running vectorized LP battery optimization on visible series...");
     
-    const actuals = chartData.filter(p => !p.is_forecast);
-    const validLoad = actuals.filter(p => p.load_p != null).map(p => p.load_p);
-    const validSolar = actuals.filter(p => p.pv_p != null).map(p => p.pv_p);
-    
-    const avgLoad = validLoad.length > 0 ? (validLoad.reduce((a,b) => a+b, 0) / validLoad.length) : 2.0;
-    const avgSolar = validSolar.length > 0 ? (validSolar.reduce((a,b) => a+b, 0) / validSolar.length) : 1.5;
-
-    const mockLoad = Array(predictionResult.points.length).fill(avgLoad);
-    const mockSolar = Array(predictionResult.points.length).fill(avgSolar);
+    // Determine the series to optimize
+    const targetSeries = hasForecast ? predictionResult.points.map(p => p.forecast) : chartData.map(p => p.selling_price || p.close);
+    const targetLoad = hasForecast ? Array(targetSeries.length).fill(2.0) : chartData.map(p => p.load_p || 1.5);
+    const targetSolar = hasForecast ? Array(targetSeries.length).fill(1.5) : chartData.map(p => p.pv_p || 0.0);
     
     try {
       const optResp = await batteryApi.optimize({
-        buy_price: predictionResult.points.map(p => p.forecast),
-        sell_price: predictionResult.points.map(p => p.forecast).map(v => v * 0.8), // 80% export rate
-        load_forecast: mockLoad,
-        solar_forecast: mockSolar,
+        price_forecast: targetSeries,
+        sell_price_forecast: targetSeries.map(v => v * 0.8),
+        load_forecast: targetLoad,
+        solar_forecast: targetSolar,
         soc_init: 0.5,
         battery_capacity_kwh: 16.0,
         p_max_kw: 8.0,
@@ -446,12 +444,15 @@ export default function useDashboard(isDarkMode) {
         eta: 0.94868
       });
       
-      setPredictionResult(prev => ({
-        ...prev,
-        optimizer: optResp,
-        load_forecast: mockLoad,
-        solar_forecast: mockSolar
-      }));
+      setPredictionResult(prev => {
+        const base = prev || {};
+        return {
+          ...base,
+          optimizer: optResp,
+          load_forecast: targetLoad,
+          solar_forecast: targetSolar
+        };
+      });
       setStatusMessage("Manual optimization complete. Dashboard updated.");
     } catch (err) {
       console.error("Manual optimization failed:", err);

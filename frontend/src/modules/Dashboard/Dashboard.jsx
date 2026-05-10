@@ -555,6 +555,7 @@ export default function Dashboard({ isDarkMode }) {
                                 aprilSource={aprilSource}
                                 septSource={septSource}
                                 predictionType={predictionType}
+                                predictionHorizon={predictionHorizon}
                                 onManualOptimize={handleManualOptimize}
                             />
                         </div>

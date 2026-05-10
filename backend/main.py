@@ -6,8 +6,12 @@ FastAPI entry point for the Enerlytics AI backend.
 - The OpenAPI documentation is automatically available at /docs and /redoc.
 """
 
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# Silence pandas downcasting warnings
+pd.set_option('future.no_silent_downcasting', True)
 
 # Routers (will be defined in backend/app/api/routes/)
 from api.routes import market, forecast, upload, resample, strategy, chart, utilities, battery

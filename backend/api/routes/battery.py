@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from models.schemas import BatteryOptimizationRequest, BatteryOptimizationResponse, OHLCVPoint
-from core.services.battery_optimizer import optimize_battery
+from core.services.battery_optimizer import optimize_battery, compute_baseline_cost
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
@@ -20,29 +20,55 @@ async def run_battery_optimization(request: BatteryOptimizationRequest):
     Run the LP-based battery optimizer for a given forecast horizon.
     """
     try:
-        buy_price = np.array(request.price_forecast)
-        sell_price = np.array(request.sell_price_forecast) if request.sell_price_forecast else buy_price * 0.8
-        
+        # Cleanup inputs: ensure no NaNs or Infs reach the optimizer
+        buy_price = np.nan_to_num(np.array(request.price_forecast), nan=0.25)
+        sell_price = np.nan_to_num(np.array(request.sell_price_forecast), nan=0.20) if request.sell_price_forecast else buy_price * 0.8
+        load_forecast = np.nan_to_num(np.array(request.load_forecast), nan=1.5)
+        solar_forecast = np.nan_to_num(np.array(request.solar_forecast), nan=0.0)
+
         result = optimize_battery(
             buy_price=buy_price,
             sell_price=sell_price,
-            load_forecast=np.array(request.load_forecast),
-            solar_forecast=np.array(request.solar_forecast),
+            load_forecast=load_forecast,
+            solar_forecast=solar_forecast,
             soc_init=request.soc_init,
-            battery_capacity_kwh=request.battery_capacity_kwh,
-            p_max_kw=request.p_max_kw,
-            grid_limit_kw=request.grid_limit_kw
+            battery_capacity_kwh=request.battery_capacity_kwh or 16.0,
+            p_max_kw=request.p_max_kw or 8.0,
+            grid_limit_kw=request.grid_limit_kw or 6.0
         )
         
-        if result["status"] == "infeasible":
-            raise HTTPException(status_code=400, detail="Optimization problem is infeasible")
-            
+        if not result.get("success", False):
+            raise HTTPException(status_code=400, detail=f"Optimization failed: {result.get('message', 'Unknown error')}")
+
+        # Calculate baseline (Grid-Only) cost for comparison
+        baseline_cost = compute_baseline_cost(buy_price, sell_price, load_forecast, solar_forecast)
+        
+        # Format results for the frontend Response Schema
+        total_cost = np.sum(result["cost_eur"])
+        savings_eur = baseline_cost - total_cost
+        savings_pct = (savings_eur / baseline_cost * 100) if baseline_cost > 0 else 0
+
         # Add synthetic timestamps for the 15-min intervals
         start_time = datetime.now().replace(minute=0, second=0, microsecond=0)
-        result["timestamps"] = [start_time + timedelta(minutes=15*i) for i in range(len(request.price_forecast))]
+        formatted_result = {
+            "status": "success" if result["success"] else "failed",
+            "soc_trajectory": result["soc"].tolist(),
+            "charge_schedule": result["p_charge_kw"].tolist(),
+            "discharge_schedule": result["p_discharge_kw"].tolist(),
+            "grid_import": result["p_grid_import_kw"].tolist(),
+            "grid_export": result["p_grid_export_kw"].tolist(),
+            "total_cost_eur": float(total_cost),
+            "baseline_cost_eur": float(baseline_cost),
+            "savings_eur": float(savings_eur),
+            "savings_pct": float(savings_pct),
+            "timestamps": [start_time + timedelta(minutes=15*i) for i in range(len(request.price_forecast))]
+        }
         
-        return result
+        return formatted_result
     except Exception as e:
+        import traceback
+        print(f"ERROR: Optimization route failed: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/simulate", response_model=BatteryOptimizationResponse)
@@ -73,16 +99,16 @@ async def run_rolling_mpc_simulation(request: BatteryOptimizationRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-def get_tou_price(ts: datetime) -> float:
-    """
-    Returns the official Italian ToU price for a given timestamp.
-    F1 (Peak): €0.2540 - Mon-Fri 08:00-19:00
-    F2 (Shoulder): €0.2682 - Mon-Fri 07-08 & 19-23 | Sat 07:00-23:00
-    F3 (Off-peak): €0.2440 - All other times (Nights, Sundays)
-    """
-    # Note: Holidays are simplified to F3 per standard practice unless a full holiday list is provided
-    weekday = ts.weekday() # 0=Mon, 5=Sat, 6=Sun
+
+def get_tou_price(ts):
+    """Returns the Italian ToU price for a given timestamp."""
+    # Safety: ensure we have a datetime object
+    if isinstance(ts, str):
+        ts = pd.to_datetime(ts)
+        
     hour = ts.hour
+    weekday = ts.weekday() # 0=Mon, 5=Sat, 6=Sun
+    date = ts.date()
 
     if weekday < 5: # Mon-Fri
         if 8 <= hour < 19:
@@ -129,55 +155,95 @@ async def run_audit(request: Dict = None):
         elif len(available_years) > 0:
             target_year = max(available_years)
 
+    # 1. Determine the audit window based on the requested horizon
+    # Translate sidebar labels (1M, 3M, 1W) to day counts
+    horizon_val = str(request.get("horizon", "audit"))
+    horizon_map = {"1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "30": 30, "Month 3 Audit": 31}
+    
+    days_horizon = None
+    if horizon_val in horizon_map:
+        days_horizon = horizon_map[horizon_val]
+    elif horizon_val.isdigit():
+        days_horizon = int(horizon_val)
+
+    if horizon_val == "Month 3 Audit":
+        # Strict filter for March only
+        df_to_audit = df[df['timestamp'].dt.month == 3].copy()
+        if not df_to_audit.empty:
+            max_ts = df_to_audit['timestamp'].max()
+            found_periods = [(3, max_ts.year, "March Audit Window")]
+            df = df_to_audit
+            days_horizon = 31
+        else:
+            days_horizon = None # Fallback if no March data
+    elif days_horizon:
+        # Filter for the last N days
+        max_ts = df['timestamp'].max()
+        start_ts = max_ts - pd.Timedelta(days=days_horizon)
+        df_to_audit = df[df['timestamp'] > start_ts].copy()
+        
+        # We'll treat this as one "Custom Window" for the UI
+        month_name = f"Last {days_horizon} Days"
+        found_periods = [(0, max_ts.year, month_name)]
+        # Replace the full df with our sliced version for the loop
+        df = df_to_audit 
+    else:
+        # Detect all months present in the data for the full audit
+        months_in_data = df['timestamp'].dt.month.unique()
+        years_in_data = df['timestamp'].dt.year.unique()
+        month_map = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June", 
+                     7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
+        
+        found_periods = []
+        for yr in sorted(years_in_data):
+            m_list = sorted(df[df['timestamp'].dt.year == yr]['timestamp'].dt.month.unique())
+            for m in m_list:
+                found_periods.append((m, yr, month_map[m]))
+        
+        # Default: Limit to top 2 for UI
+        found_periods = found_periods[:2]
+
     results = {}
     overall_errors = []
     overall_actuals = []
 
-    for month_num, month_name in [(4, "April"), (9, "September")]:
-        # Filter for target year and the specific month
-        month_df = df[(df['timestamp'].dt.year == target_year) & (df['timestamp'].dt.month == month_num)].copy()
-        
-        if month_df.empty:
-            # Fallback: if specific month missing in target year, try ANY month in target year just to show data
-            if not df[df['timestamp'].dt.year == target_year].empty:
-                month_df = df[df['timestamp'].dt.year == target_year].iloc[:2880].copy()
-                display_period = f"Sample {target_year}"
-            else:
-                results[month_name.lower()] = {
-                    "period": f"{month_name} {target_year}",
-                    "nrmse": 0, "rmse": 0, "mae": 0, "points": 0, "series": []
-                }
-                continue
+    for month_num, target_year, month_name in found_periods:
+        # Filter for the specific period
+        if days_horizon:
+            month_df = df.copy() # Already sliced
         else:
-            display_period = f"{month_name} {target_year}"
+            month_df = df[(df['timestamp'].dt.year == target_year) & (df['timestamp'].dt.month == month_num)].copy()
+        
+        display_period = f"{month_name} {target_year}" if not days_horizon else month_name
+        result_key = month_name.lower().replace(" ", "_")
 
-        # Determine model file based on architecture
+        # Determine model file and scaler based on architecture
         current_arch = architecture
         if architecture == 'hybrid':
-            current_arch = april_source if month_num == 4 else sept_source
+            # Dynamic Hybrid: Logic still exists but we can simplify if needed
+            current_arch = 'advanced' 
 
         model_file = 'lgbm_load.pkl'
+        scaler_file = 'scaler.pkl'
+        
         if current_arch == 'standard': model_file = 'lstm_load_standard.h5'
         elif current_arch == 'bidirectional': model_file = 'lstm_load_bidi.h5'
         elif current_arch == 'advanced':
-            # Dynamic Walk-Forward Model Selection for the Web UI
-            if month_num == 4 and os.path.exists(os.path.join(MODEL_DIR, 'lgbm_load_april.pkl')):
-                model_file = 'lgbm_load_april.pkl'
+            # Dynamic Discovery
+            m_lower = month_name.lower().split()[0] # e.g. "march"
+            m_model = f'lgbm_load_{m_lower}.pkl'
+            m_scaler = f'scaler_{m_lower}.pkl'
+            
+            if os.path.exists(os.path.join(MODEL_DIR, m_model)):
+                model_file = m_model
+                if os.path.exists(os.path.join(MODEL_DIR, m_scaler)):
+                    scaler_file = m_scaler
+            
+            # Load the discovered model into the forecaster instance
+            if model_file.endswith('.pkl') and os.path.exists(os.path.join(MODEL_DIR, model_file)):
                 forecaster.load_model = joblib.load(os.path.join(MODEL_DIR, model_file))['model']
-                forecaster.scaler = joblib.load(os.path.join(MODEL_DIR, 'scaler_april.pkl'))
-            elif month_num == 9 and os.path.exists(os.path.join(MODEL_DIR, 'lgbm_load_sept.pkl')):
-                model_file = 'lgbm_load_sept.pkl'
-                forecaster.load_model = joblib.load(os.path.join(MODEL_DIR, model_file))['model']
-                forecaster.scaler = joblib.load(os.path.join(MODEL_DIR, 'scaler_sept.pkl'))
-            else:
-                if os.path.exists(os.path.join(MODEL_DIR, 'lgbm_load.pkl')):
-                    forecaster.load_model = joblib.load(os.path.join(MODEL_DIR, 'lgbm_load.pkl'))['model']
-                    forecaster.scaler = joblib.load(os.path.join(MODEL_DIR, 'scaler.pkl'))
-        elif current_arch == 'lightgbm':
-            model_file = 'lgbm_load.pkl'
-            if os.path.exists(os.path.join(MODEL_DIR, 'lgbm_load.pkl')):
-                forecaster.load_model = joblib.load(os.path.join(MODEL_DIR, 'lgbm_load.pkl'))['model']
-                forecaster.scaler = joblib.load(os.path.join(MODEL_DIR, 'scaler.pkl'))
+                if os.path.exists(os.path.join(MODEL_DIR, scaler_file)):
+                    forecaster.scaler = joblib.load(os.path.join(MODEL_DIR, scaler_file))
 
         model_exists = os.path.exists(os.path.join(MODEL_DIR, model_file))
         
@@ -206,14 +272,17 @@ async def run_audit(request: Dict = None):
                     print(f"⚠️ Warning: Full features slice for {month_name} {target_year} is empty. Falling back to month-only engineering.")
                     month_with_features = forecaster.build_energy_features(month_df.set_index('timestamp'))
 
+                # 5. Price Vectors
+                # 5. Price Vectors
+                dt_timestamps = pd.to_datetime(month_with_features.index)
+                buying_prices = np.array([get_tou_price(t) for t in dt_timestamps])
+                selling_prices = month_with_features['price'].values if 'price' in month_with_features.columns else np.full(len(month_with_features), 0.10)
+                
                 # Extract solar and tariff bands from the featured df
                 solars = month_with_features['solar'].values if 'solar' in month_with_features.columns else (month_with_features['pv_p'].values if 'pv_p' in month_with_features.columns else np.zeros(len(month_with_features)))
                 t_f1 = month_with_features['tariff_f1'].values if 'tariff_f1' in month_with_features.columns else np.zeros(len(month_with_features), dtype=bool)
                 t_f2 = month_with_features['tariff_f2'].values if 'tariff_f2' in month_with_features.columns else np.zeros(len(month_with_features), dtype=bool)
                 t_f3 = month_with_features['tariff_f3'].values if 'tariff_f3' in month_with_features.columns else np.zeros(len(month_with_features), dtype=bool)
-                
-                # Calculate buying price (fixed tariffs)
-                buying_prices = np.where(t_f1, 0.2540, np.where(t_f2, 0.2682, 0.2440))
 
                 if current_arch in ["advanced", "lightgbm"] and forecaster.load_model:
                     # LightGBM Path
@@ -235,23 +304,24 @@ async def run_audit(request: Dict = None):
                     # Update the forecaster instance so it's consistent
                     forecaster.feature_names = schema_features
                     
-                    # 2. Ensure all required features are present in the dataframe
-                    for feat in schema_features:
+                    # 2. DEFENSIVE: Match the dataframe features exactly to what the Scaler knows
+                    # This prevents the "Feature names unseen at fit time" error
+                    known_features = getattr(forecaster.scaler, 'feature_names_in_', schema_features)
+                    
+                    for feat in known_features:
                         if feat not in month_with_features.columns:
-                            # If a feature is missing (e.g. price indicators), it might be due to 
-                            # data quality or pandas_ta issues. We must fill it to prevent scaler crash.
                             month_with_features[feat] = 0.0
 
-                    # 3. Select and scale
-                    X_data = month_with_features[schema_features].astype(float)
+                    # 3. Select only the known features and scale
+                    X_data = month_with_features[known_features].astype(float)
                     X_scaled = forecaster.scaler.transform(X_data)
-                    X = pd.DataFrame(X_scaled, columns=schema_features)
+                    X = pd.DataFrame(X_scaled, columns=known_features)
                     
+                    # Ensure the model also receives what it expects
+                    # (Usually model and scaler feature sets are identical)
                     predictions = forecaster.load_model.predict(X)
                     actuals = month_with_features['load'].values if 'load' in month_with_features.columns else month_with_features['load_p'].values
                     timestamps = month_with_features.index.strftime('%Y-%m-%dT%H:%M:%S').tolist()
-
-                    
                 elif architecture in ["standard", "bidirectional"]:
                     # LSTM Path
                     from core.services.lstm_forecaster import predict_lstm_batch
