@@ -132,8 +132,8 @@ const AccuracyReport = ({ nrmse, mae, rmse, generalization }) => (
       </div>
     </div>
     <div className="validation-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${THEME.border}`, fontSize: '0.75rem', color: THEME.textSecondary, display: 'flex', alignItems: 'center', gap: '8px' }}>
-       <Info size={14} /> 
-       Audit Note: Validation performed on 2025 Test Window. Generalization score reflects zero-shot performance on unseen residential profiles.
+      <Info size={14} />
+      Audit Note: Validation performed on 2025 Test Window. Generalization score reflects zero-shot performance on unseen residential profiles.
     </div>
   </div>
 );
@@ -149,7 +149,11 @@ export default function BatteryDashboard({
   timeframe,
   setTimeframe,
   interval,
-  setInterval
+  setInterval,
+  architecture,
+  aprilSource,
+  septSource,
+  predictionType
 }) {
   const [replayStep, setReplayStep] = useState(0);
   const [isReplaying, setIsReplaying] = useState(false);
@@ -160,8 +164,23 @@ export default function BatteryDashboard({
   const handleRunAudit = async () => {
     setIsAuditing(true);
     try {
-      const resp = await fetch('http://localhost:8000/api/battery/audit', { method: 'POST' });
+      const resp = await fetch('http://localhost:8000/api/battery/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data: historicalData,
+          architecture: architecture,
+          aprilSource: aprilSource,
+          septSource: septSource,
+          prediction_type: predictionType
+        })
+      });
       const data = await resp.json();
+      if (data.error) {
+        alert(data.error);
+        setIsAuditing(false);
+        return;
+      }
       setAuditData(data);
     } catch (e) {
       console.error("Audit failed", e);
@@ -172,49 +191,54 @@ export default function BatteryDashboard({
 
   const handleDownloadAuditReport = () => {
     if (!auditData) return;
-    const report = `
-============================================================
-SOLSHIP HACKATHON 2026 - OFFICIAL AUDIT REPORT
-============================================================
-Generation Date: ${new Date().toLocaleString()}
-Model Architecture: ${architecture.toUpperCase()}
-Training Window: ALL (Historical 2024 Context)
 
-------------------------------------------------------------
-WINDOW 1: APRIL 2025
-------------------------------------------------------------
-Status: VALIDATED
-RMSE: ${auditData.april.rmse} kW
-MAE:  ${auditData.april.mae} kW
-NRMSE: ${auditData.april.nrmse}% (Primary Metric)
-Data Points: ${auditData.april.points}
+    const csvRows = [
+      ["Enerlytics Official Audit Report - 2025 - FULL DATASET"],
+      ["Generated Date", new Date().toLocaleString()],
+      ["Model Architecture", "DirectMultiStep-LGBM-v2"],
+      [],
+      ["--- SUMMARY METRICS ---"],
+      ["Period", "RMSE (kW)", "MAE (kW)", "NRMSE (%)", "Data Points"],
+      [auditData.april.period, auditData.april.rmse, auditData.april.mae, auditData.april.nrmse, auditData.april.points],
+      [auditData.september.period, auditData.september.rmse, auditData.september.mae, auditData.september.nrmse, auditData.september.points],
+      ["AGGREGATE PERFORMANCE", "", "", auditData.overall_nrmse + "%"],
+      [],
+      ["--- DETAILED HOURLY AUDIT DATA ---"],
+      ["Period", "Timestamp", "Actual Load (kW)", "Predicted (kW)", "Delta (kW)", "Absolute Error (kW)", "Squared Error", "Error (%)"]
+    ];
 
-------------------------------------------------------------
-WINDOW 2: SEPTEMBER 2025
-------------------------------------------------------------
-Status: VALIDATED
-RMSE: ${auditData.september.rmse} kW
-MAE:  ${auditData.september.mae} kW
-NRMSE: ${auditData.september.nrmse}% (Primary Metric)
-Data Points: ${auditData.september.points}
+    ['april', 'september'].forEach(month => {
+      if (auditData[month].series) {
+        auditData[month].series.forEach(p => {
+          const absError = Math.abs(p.actual - p.predicted);
+          const sqError = Math.pow(p.actual - p.predicted, 2);
+          csvRows.push([
+            auditData[month].period,
+            p.ts,
+            p.actual,
+            p.predicted,
+            p.delta,
+            absError.toFixed(4),
+            sqError.toFixed(6),
+            p.error_pct + "%"
+          ]);
+        });
+      }
+    });
 
-------------------------------------------------------------
-AGGREGATE PERFORMANCE SCORE
-------------------------------------------------------------
-OVERALL NRMSE: ${auditData.overall_nrmse}%
-RATING: ${auditData.overall_nrmse < 12 ? 'PLATINUM (TOP 5%)' : auditData.overall_nrmse < 15 ? 'GOLD' : 'SILVER'}
-
-============================================================
-END OF REPORT
-============================================================
-`;
-    const blob = new Blob([report], { type: 'text/plain' });
+    const csvContent = csvRows.map(row => row.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Enerlytics_Audit_Report_2025.txt`;
+    link.download = `Enerlytics_Official_Audit_Report_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
   };
+
+  useEffect(() => {
+    // Reset audit scorecard when a new prediction is triggered or settings change
+    setAuditData(null);
+  }, [forecastResult, architecture, predictionType]);
 
   useEffect(() => {
     let interval;
@@ -238,13 +262,13 @@ END OF REPORT
       // Find the last ACTUAL data point, skipping future forecast points
       const actuals = historicalData.filter(d => !d.is_forecast);
       const last = actuals.length > 0 ? actuals[actuals.length - 1] : (historicalData.length > 0 ? historicalData[0] : null);
-      
+
       if (!last) return { savings: 0, savings_pct: 0, soc: 0, grid: 0, solar: 0, baseline: 0, total: 0 };
 
       return {
         savings: 0,
         savings_pct: 0,
-        soc: (last.soc_reconstructed || 0) * 100, 
+        soc: (last.soc_reconstructed || 0) * 100,
         grid: last.grid_p || 0,
         solar: last.pv_p || 0,
         baseline: 0,
@@ -254,7 +278,7 @@ END OF REPORT
     if (!optimizerResult) return { savings: 0, soc: 0, grid: 0, solar: 0, baseline: 0, total: 0 };
     const socLen = optimizerResult.soc_trajectory?.length || 0;
     const powerLen = optimizerResult.grid_import?.length || 0;
-    
+
     // When not replaying, we show the 'Now' state (index 0)
     const currentStep = isReplaying ? replayStep : 0;
     const powerStep = Math.min(currentStep, powerLen > 0 ? powerLen - 1 : 0);
@@ -437,7 +461,7 @@ END OF REPORT
         <KPICard title="Current SOC" value={`${stats.soc.toFixed(1)}%`} icon={<Battery size={22} />} color={stats.soc > 50 ? THEME.success : stats.soc > 20 ? THEME.warning : THEME.danger} sparkData={optimizerResult?.soc_trajectory || []} />
         <KPICard title="Grid Import Now" value={`${stats.grid.toFixed(2)} kW`} icon={<Zap size={22} />} color={THEME.accent} sparkData={optimizerResult?.grid_import || historicalData?.map(d => d.grid_p) || []} />
         <KPICard title="Solar Generation" value={`${stats.solar.toFixed(2)} kW`} icon={<Sun size={22} />} color={THEME.solar} sparkData={forecastResult?.solar_forecast || historicalData?.map(d => d.pv_p) || []} />
-        
+
         {/* 1.1 New System Constraints Panel */}
         <div className="bloomberg-card constraints-card" style={{ borderLeft: `4px solid ${THEME.accent}` }}>
           <div className="card-header" style={{ marginBottom: '0.5rem' }}>
@@ -523,11 +547,11 @@ END OF REPORT
         />
       </div>
 
-      <AccuracyReport 
-        nrmse={11.42} 
-        mae={0.42} 
-        rmse={0.61} 
-        generalization={1.15} 
+      <AccuracyReport
+        nrmse={11.42}
+        mae={0.42}
+        rmse={0.61}
+        generalization={1.15}
       />
 
 
@@ -610,26 +634,27 @@ END OF REPORT
         <div className="panel-header-row">
           <div className="panel-title-group">
             <TrendingUp size={18} color={THEME.solar} />
-            <h3>Solship Hackathon 2026 — Official Accuracy Audit</h3>
+            <h3>Check Accuracy</h3>
           </div>
-          {auditData ? (
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <button className="action-btn" onClick={handleDownloadAuditReport} style={{ background: 'transparent', border: `1px solid ${THEME.solar}`, color: THEME.solar }}>
-                <Download size={14} /> Download Audit Report (.txt)
-              </button>
-              <span className="badge" style={{ background: THEME.solar, color: THEME.bg }}>Aggregate NRMSE: {auditData.overall_nrmse}%</span>
-            </div>
-          ) : (
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            {auditData && (
+              <>
+                <button className="action-btn" onClick={handleDownloadAuditReport} style={{ background: 'transparent', border: `1px solid ${THEME.solar}`, color: THEME.solar }}>
+                  <Download size={14} /> Download Audit Report
+                </button>
+                <span className="badge" style={{ background: THEME.solar, color: THEME.bg }}>NRMSE: {auditData.overall_nrmse}%</span>
+              </>
+            )}
             <button className={`action-btn primary ${isAuditing ? 'loading' : ''}`} onClick={handleRunAudit} disabled={isAuditing} style={{ background: THEME.solar }}>
-              <Zap size={14} /> {isAuditing ? "Auditing System..." : "Execute Competition Audit"}
+              <Zap size={14} /> {isAuditing ? "Auditing System..." : (auditData ? "Re-run Accuracy Check" : "Check Accuracy")}
             </button>
-          )}
+          </div>
         </div>
-        
+
         {!auditData && !isAuditing && (
           <div style={{ textAlign: 'center', padding: '3rem', color: THEME.textSecondary }}>
             <Target size={40} opacity={0.2} style={{ marginBottom: '1rem', margin: '0 auto' }} />
-            <p>Official validation for **April** and **September 2025** windows.</p>
+            <p>Official validation for April and September 2025 windows.</p>
             <p style={{ fontSize: '0.8rem' }}>Click "Execute Competition Audit" above to verify Site 1 Accuracy and generate submission reports.</p>
           </div>
         )}
@@ -646,7 +671,8 @@ END OF REPORT
             <div className="audit-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '1rem' }}>
               {['april', 'september'].map(month => (
                 <div key={month} className="audit-month-card" style={{ background: 'rgba(255,255,255,0.03)', padding: '1.5rem', borderRadius: '12px', border: `1px solid ${THEME.border}` }}>
-                  <h4 style={{ textTransform: 'uppercase', color: THEME.solar, marginBottom: '1rem' }}>{auditData[month].period} Window</h4>
+                  <h4 style={{ textTransform: 'uppercase', color: THEME.solar, marginBottom: '0.25rem' }}>{auditData[month].period} Window</h4>
+                  <div style={{ fontSize: '0.7rem', color: THEME.solar, opacity: 0.7, marginBottom: '1rem', fontStyle: 'italic' }}>Engine: {auditData[month].source}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
                     <div className="audit-stat">
                       <div style={{ fontSize: '0.7rem', color: THEME.textSecondary }}>RMSE (kW)</div>
@@ -661,12 +687,12 @@ END OF REPORT
                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: THEME.solar }}>{auditData[month].nrmse}%</div>
                     </div>
                   </div>
-                  <button 
-                    className="action-btn" 
+                  <button
+                    className="action-btn"
                     style={{ width: '100%', marginTop: '1rem', background: 'rgba(255,255,255,0.05)', justifyContent: 'center' }}
                     onClick={() => setExpandedMonth(expandedMonth === month ? null : month)}
                   >
-                    {expandedMonth === month ? <ChevronUp size={14} /> : <ChevronDown size={14} />} 
+                    {expandedMonth === month ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     {expandedMonth === month ? "Hide Hourly Comparison" : "View Hourly Comparison"}
                   </button>
                 </div>
@@ -691,14 +717,14 @@ END OF REPORT
                       </tr>
                     </thead>
                     <tbody>
-                      {Array.from({ length: 96 }).map((_, i) => {
-                        const actual = (2 + Math.sin(i / 10)).toFixed(2);
-                        const pred = (parseFloat(actual) + (Math.random() * 0.2 - 0.1)).toFixed(2);
-                        const delta = (parseFloat(pred) - parseFloat(actual)).toFixed(2);
-                        const err = ((Math.abs(delta) / actual) * 100).toFixed(1);
+                      {(auditData[expandedMonth].series || []).slice(0, 96).map((item, i) => {
+                        const actual = item.actual;
+                        const pred = item.predicted;
+                        const delta = item.delta;
+                        const err = item.error_pct;
                         return (
                           <tr key={i} style={{ borderBottom: `1px solid ${THEME.border}33`, opacity: 0.9 }}>
-                            <td style={{ padding: '0.5rem 0.75rem', color: THEME.textSecondary }}>{expandedMonth === 'april' ? '2025-04-01' : '2025-09-01'} {String(Math.floor(i/4)).padStart(2, '0')}:{(i%4)*15}</td>
+                            <td style={{ padding: '0.5rem 0.75rem', color: THEME.textSecondary }}>{new Date(item.ts).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                             <td style={{ padding: '0.5rem 0.75rem', fontWeight: 600 }}>{actual}</td>
                             <td style={{ padding: '0.5rem 0.75rem', color: THEME.solar }}>{pred}</td>
                             <td style={{ padding: '0.5rem 0.75rem', color: delta > 0 ? THEME.danger : THEME.success }}>{delta > 0 ? '+' : ''}{delta}</td>

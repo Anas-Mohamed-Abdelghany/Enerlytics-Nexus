@@ -13,6 +13,7 @@ export default function useDashboard(isDarkMode) {
   const [mode, setMode] = useState(null);
   const [isBatteryDemo, setIsBatteryDemo] = useState(false);
   const [fullSeries, setFullSeries] = useState([]);
+  const [trainSeries, setTrainSeries] = useState([]);
   const [chartData, setChartData] = useState([]);
   const [kpis, setKpis] = useState(null);
   const [fileInfo, setFileInfo] = useState(null);
@@ -49,9 +50,11 @@ export default function useDashboard(isDarkMode) {
   const [predictionResult, setPredictionResult] = useState(null);
   const [statusMessage, setStatusMessage] = useState("System Ready — Select an AI action to begin analysis.");
   const [predictionType, setPredictionType] = useState("regression");
-  const [predictionHorizon, setPredictionHorizon] = useState(30);
+  const [predictionHorizon, setPredictionHorizon] = useState("Audit");
   const [trainingWindow, setTrainingWindow] = useState("ALL");
   const [architecture, setArchitecture] = useState("advanced");
+  const [aprilSource, setAprilSource] = useState("advanced");
+  const [septSource, setSeptSource] = useState("advanced");
   const [checkSamples, setCheckSamples] = useState(5);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [marketSentiment, setMarketSentiment] = useState(null);
@@ -95,6 +98,7 @@ export default function useDashboard(isDarkMode) {
         setFileInfo({ name: resp.filename, size: fmtSize(file.size), rows: resp.rows || 0 });
         setTimeframe("ALL"); setInterval("1D");
       } else {
+        setTrainSeries(resp.series || []);
         setTrainStatus("success");
         setStatusMessage(`Training data [${resp.filename}] ingested successfully. ${resp.rows} samples ready.`);
       }
@@ -112,8 +116,9 @@ export default function useDashboard(isDarkMode) {
     setError(null);
     try {
       const resp = await uploadApi.loadPredefined();
+      setTrainSeries(resp.series || []);
       setTrainStatus("success");
-      setStatusMessage(`Predefined training data [${resp.filename}] loaded from local disk. ${resp.rows} samples ready for model tuning.`);
+      setStatusMessage(`Predefined training data [${resp.filename}] loaded. ${resp.rows} samples ready.`);
     } catch (e) {
       console.error("Predefined load error:", e);
       setTrainStatus("error");
@@ -211,7 +216,7 @@ export default function useDashboard(isDarkMode) {
   // ── AI Prediction ───────────────────────────────────────────────────────────
   const handlePredict = useCallback(async () => {
     if (!fullSeries.length) return;
-    setPredicting(true); setError(null);
+    setPredicting(true); setError(null); setPredictionResult(null);
     setStatusMessage(`Training ${architecture === "pretrained" ? "Pretrained" : architecture.toUpperCase() + " LSTM"} ${predictionType} model with ${trainingWindow} of data...`);
     try {
       const windowMap = { "1M": 30, "3M": 90, "6M": 180, "1Y": 365, "2Y": 730, "3Y": 1095, "ALL": fullSeries.length };
@@ -224,13 +229,15 @@ export default function useDashboard(isDarkMode) {
 
       let resp;
       if (predictionHorizon === "Audit") {
-        resp = await batteryApi.audit(); // Calls the /audit endpoint we created
+        setStatusMessage("Running Official 2025 Audit on live data...");
+        resp = await batteryApi.audit(trainingData, architecture, aprilSource, septSource); // Calls the /audit endpoint with authentic data
         // Map audit results to a format the UI expects if necessary
         setStatusMessage("Official 2025 Audit for April and September complete. Displaying Scorecard...");
         setPredictionResult({ ...resp, is_audit: true });
         setPredicting(false);
         return;
       }
+
 
       resp = await forecastApi.fetchForecast(
         ticker || "Market",
@@ -301,7 +308,7 @@ export default function useDashboard(isDarkMode) {
       setStatusMessage(`Error: ${e.message}`);
     }
     finally { setPredicting(false); }
-  }, [chartData, fullSeries, predictionType, architecture, trainingWindow, predictionHorizon, ticker, checkSamples]);
+  }, [chartData, fullSeries, predictionType, architecture, aprilSource, septSource, trainingWindow, predictionHorizon, ticker, checkSamples]);
 
   // ── AI Strategy Analysis ────────────────────────────────────────────────────
   const handleStrategy = useCallback(async (manualStrategy = null) => {
@@ -445,8 +452,58 @@ export default function useDashboard(isDarkMode) {
     }
   }, [apiChoice, tickerMap, setFetchInterval, setStartDate, setEndDate, setTicker]);
 
+  const handleTrainAll = useCallback(async (arch = "all") => {
+    const trainingData = trainSeries.length > 0 ? trainSeries : fullSeries;
+    
+    if (!trainingData || trainingData.length === 0) {
+      alert("No data available for training. Please upload the Training CSV first.");
+      return;
+    }
+    setPredicting(true);
+    setStatusMessage(`Training ${arch === 'all' ? 'All Models' : arch} on ${trainSeries.length > 0 ? 'Training File' : 'Current Series'}... Please wait.`);
+
+    try {
+      // Map the arch string to the correct sub-route
+      const subRoute = arch === 'all' ? 'all' : arch;
+      const resp = await fetch(`http://localhost:8000/api/battery/train/${subRoute}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          data: trainingData
+        })
+      });
+      const result = await resp.json();
+      
+      if (result.error) {
+        alert("Training failed: " + result.error);
+        setStatusMessage("Training Error: " + result.error);
+      } else {
+        setStatusMessage("Training Complete! All models saved.");
+        
+        // Trigger download of the text report
+        const blob = new Blob([result.text], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `training_report_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        alert("Training successful! Report downloaded.");
+      }
+    } catch (e) {
+      console.error("Training failed", e);
+      setStatusMessage("System Error: Could not reach training server.");
+    } finally {
+      setPredicting(false);
+    }
+  }, [fullSeries]);
+
   // ── Return everything ───────────────────────────────────────────────────────
   return {
+    handleTrainAll,
     // Core
     mode, setMode, fullSeries, chartData, kpis, fileInfo,
     timeframe, interval, uploading, resampling, error, setError,
@@ -468,6 +525,8 @@ export default function useDashboard(isDarkMode) {
     predictionHorizon, setPredictionHorizon,
     trainingWindow, setTrainingWindow,
     architecture, setArchitecture,
+    aprilSource, setAprilSource,
+    septSource, setSeptSource,
     checkSamples, setCheckSamples,
     showHowItWorks, setShowHowItWorks,
     marketSentiment,

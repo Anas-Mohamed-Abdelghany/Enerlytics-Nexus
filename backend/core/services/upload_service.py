@@ -89,7 +89,7 @@ def _normalise_df(df: pd.DataFrame) -> List[OHLCVPoint]:
     sell_col    = _find_col(cols, "selling_price")
 
     # Parse timestamps
-    df["_ts"] = pd.to_datetime(df[ts_col], infer_datetime_format=True, errors="coerce")
+    df["_ts"] = pd.to_datetime(df[ts_col], errors="coerce")
     df["_close"] = pd.to_numeric(df[close_col], errors="coerce")
     df = df.dropna(subset=["_ts", "_close"])
     df = df[df["_close"] > 0]

@@ -35,6 +35,8 @@ export default function Dashboard({ isDarkMode }) {
         predictionHorizon, setPredictionHorizon,
         trainingWindow, setTrainingWindow,
         architecture, setArchitecture,
+        aprilSource, setAprilSource,
+        septSource, setSeptSource,
         checkSamples, setCheckSamples,
         selectedStrategies, setSelectedStrategies,
         isBatteryDemo,
@@ -51,6 +53,7 @@ export default function Dashboard({ isDarkMode }) {
 
         // Handlers
         handlePredict, handleStrategy, handleDownloadCSV,
+        handleTrainAll,
         changeTimeframe, changeInterval, timeframe, interval
     } = dashboard;
 
@@ -364,6 +367,10 @@ export default function Dashboard({ isDarkMode }) {
                                 setTrainingWindow={setTrainingWindow}
                                 architecture={architecture}
                                 setArchitecture={setArchitecture}
+                                aprilSource={aprilSource}
+                                setAprilSource={setAprilSource}
+                                septSource={septSource}
+                                setSeptSource={setSeptSource}
                                 checkSamples={checkSamples}
                                 setCheckSamples={setCheckSamples}
                                 selectedStrategies={selectedStrategies}
@@ -375,6 +382,7 @@ export default function Dashboard({ isDarkMode }) {
                                 setShowRobustnessDetails={setShowRobustnessDetails}
                                 handlePredict={handlePredict}
                                 handleStrategy={handleStrategy}
+                                handleTrainAll={handleTrainAll}
                                 handleDownloadCSV={handleDownloadCSV}
                             />
                         </div>
@@ -519,6 +527,10 @@ export default function Dashboard({ isDarkMode }) {
                                 setTimeframe={changeTimeframe}
                                 interval={interval}
                                 setInterval={changeInterval}
+                                architecture={architecture}
+                                aprilSource={aprilSource}
+                                septSource={septSource}
+                                predictionType={predictionType}
                             />
                         </div>
                     )}
