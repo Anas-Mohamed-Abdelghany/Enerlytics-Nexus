@@ -37,11 +37,11 @@ _COL_ALIASES: Dict[str, List[str]] = {
     "low":       ["low",  "low_price",  "l"],
     "close":     ["close", "close_price", "price", "last", "c", "p", "selling_price_eur_kwh", "selling_price", "price_eur_kwh", "price_kwh"],
     "volume":    ["volume", "vol", "v"],
-    # Energy Aliases
+    # Energy Aliases - Prioritize direct matches
     "battery_p": ["battery_p", "battery_power", "battery"],
     "grid_p":    ["grid_p", "grid_power", "grid"],
-    "load_p":    ["load_p", "load_power", "load"],
-    "pv_p":      ["pv_p", "pv_power", "pv", "solar"],
+    "load_p":    ["load", "load_kw", "load_p", "load_power"],
+    "pv_p":      ["solar", "pv", "pv_kw", "pv_p", "pv_power"],
     "selling_price": ["selling_price_eur_kwh", "selling_price", "price_eur_kwh", "price_kwh"],
 }
 

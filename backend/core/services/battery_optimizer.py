@@ -34,8 +34,8 @@ def compute_baseline_cost(
     net_load = load_kw - solar_kw
     grid_import = np.maximum(0, net_load)
     grid_export = np.maximum(0, -net_load)
-    # Sign convention: negative = paid, positive = revenue
-    cost = (grid_export * sell_price - grid_import * buy_price) * dt
+    # Sign convention: positive = cost, negative = revenue
+    cost = (grid_import * buy_price - grid_export * sell_price) * dt
     return float(np.sum(cost))
 
 from scipy import sparse
@@ -136,7 +136,7 @@ def optimize_battery(
         "p_grid_import_kw": x[idx_gi] + x[idx_slack],
         "p_grid_export_kw": x[idx_ge] + x[idx_curtail], # Total export including curtailed solar
         "soc": x[idx_soc],
-        "cost_eur": (x[idx_ge] * sell_price - x[idx_gi] * buy_price - x[idx_slack] * 1000.0) * dt
+        "cost_eur": (x[idx_gi] * buy_price - x[idx_ge] * sell_price + x[idx_slack] * 1000.0) * dt
     }
 
 def rolling_mpc_optimize(

@@ -83,7 +83,7 @@ class EnergyForecaster:
         df = df.loc[:, ~df.columns.duplicated()]
         
         # Normalize column names for robust inference
-        # We drop any existing targets if they would cause a duplicate name collision
+        # PRIORITY FIX: Prefer 'load' and 'solar' (kW) over 'load_p' and 'pv_p' (kWh/other)
         if 'Selling_price_eur_kwh' in df.columns:
             if 'price' in df.columns: df = df.drop(columns=['price'])
             df = df.rename(columns={'Selling_price_eur_kwh': 'price'})
@@ -91,11 +91,14 @@ class EnergyForecaster:
             if 'price' in df.columns: df = df.drop(columns=['price'])
             df = df.rename(columns={'selling_price': 'price'})
             
-        if 'load_p' in df.columns:
-            if 'load' in df.columns: df = df.drop(columns=['load'])
+        if 'load' in df.columns:
+            if 'load_p' in df.columns: df = df.drop(columns=['load_p'])
+        elif 'load_p' in df.columns:
             df = df.rename(columns={'load_p': 'load'})
-        if 'pv_p' in df.columns:
-            if 'solar' in df.columns: df = df.drop(columns=['solar'])
+
+        if 'solar' in df.columns:
+            if 'pv_p' in df.columns: df = df.drop(columns=['pv_p'])
+        elif 'pv_p' in df.columns:
             df = df.rename(columns={'pv_p': 'solar'})
 
         print(f"DEBUG: Shape: {df.shape}, Columns: {list(df.columns)}")
@@ -305,9 +308,15 @@ class EnergyForecaster:
         elif 'close' in data.columns:
             data = data.rename(columns={'close': 'price'})
             
-        if 'load_p' in data.columns:
+        # PRIORITY FIX: Prefer 'load' and 'solar' (kW) over 'load_p' and 'pv_p'
+        if 'load' in data.columns:
+            if 'load_p' in data.columns: data = data.drop(columns=['load_p'])
+        elif 'load_p' in data.columns:
             data = data.rename(columns={'load_p': 'load'})
-        if 'pv_p' in data.columns:
+
+        if 'solar' in data.columns:
+            if 'pv_p' in data.columns: data = data.drop(columns=['pv_p'])
+        elif 'pv_p' in data.columns:
             data = data.rename(columns={'pv_p': 'solar'})
 
         # Ensure we have at least one target

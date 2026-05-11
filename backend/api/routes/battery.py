@@ -416,7 +416,11 @@ async def run_audit(request: Dict = None):
             # NetGrid = Load - Solar - BatteryP
             # BatteryP = Charge + Discharge
             
-            opt_actions = np.array(opt_result["charge_schedule"]) + np.array(opt_result["discharge_schedule"])
+            # Correct logic: Charging increases net grid flow (import), Discharging decreases it.
+            # opt_actions (Battery Output) = Discharge - Charge
+            p_charge = np.array(opt_result["charge_schedule"])
+            p_discharge = np.array(opt_result["discharge_schedule"])
+            opt_actions = p_discharge - p_charge
             net_grid_opt = actuals - solars - opt_actions
             
             # Baseline (Battery = 0)
@@ -469,8 +473,8 @@ async def run_audit(request: Dict = None):
             print(f"Audit Optimization failed for {month_name}: {opt_err}")
             results[month_name.lower()]["optimization"] = {"error": str(opt_err)}
 
-        overall_errors.extend(np.abs(actuals - predictions))
-        overall_actuals.extend(actuals)
+        overall_errors.extend(np.abs(actuals - predictions).tolist())
+        overall_actuals.extend(actuals.tolist())
 
         results[month_name.lower()].update({
             "series": [
@@ -486,15 +490,23 @@ async def run_audit(request: Dict = None):
             ]
         })
 
-    # Calculate overall NRMSE
+    # Calculate overall metrics
     if overall_actuals:
         mean_actual = np.mean(overall_actuals)
+        mae = np.mean(overall_errors)
         rmse = np.sqrt(np.mean(np.array(overall_errors)**2))
         overall_nrmse = round((rmse / mean_actual * 100), 2) if mean_actual > 0 else 0
+        overall_mae = round(mae, 3)
+        overall_rmse = round(rmse, 3)
     else:
         overall_nrmse = 0
+        overall_mae = 0
+        overall_rmse = 0
 
     results["overall_nrmse"] = overall_nrmse
+    results["overall_mae"] = overall_mae
+    results["overall_rmse"] = overall_rmse
+    print(f"📊 Final Audit Result - NRMSE: {overall_nrmse}%, MAE: {overall_mae}, RMSE: {overall_rmse}")
     return results
 
 async def _execute_training_pipeline(data: List[Dict], arch_type: str = "all"):

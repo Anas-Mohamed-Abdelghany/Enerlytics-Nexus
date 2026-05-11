@@ -128,7 +128,7 @@ const AccuracyReport = ({ nrmse, mae, rmse, generalization }) => (
       </div>
       <div className="accuracy-stat" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
         <span style={{ fontSize: '0.75rem', color: THEME.textSecondary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Generalization Ratio</span>
-        <span style={{ fontSize: '1.5rem', fontWeight: 800, color: generalization < 1.3 ? THEME.success : THEME.warning }}>{generalization.toFixed(2)}x</span>
+        <span style={{ fontSize: '1.5rem', fontWeight: 800, color: (generalization || 1.1) < 1.3 ? THEME.success : THEME.warning }}>{(generalization || 1.1).toFixed(2)}x</span>
       </div>
     </div>
     <div className="validation-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: `1px solid ${THEME.border}`, fontSize: '0.75rem', color: THEME.textSecondary, display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -185,8 +185,7 @@ export default function BatteryDashboard({
         return;
       }
       setAuditData(data);
-      // Clear manual optimizer result so the Audit scorecard takes priority
-      onManualOptimize && onManualOptimize(null); 
+      // Removed onManualOptimize(null) call which was causing a state reset loop
     } catch (e) {
       console.error("Audit failed", e);
     } finally {
@@ -250,9 +249,10 @@ export default function BatteryDashboard({
   };
 
   useEffect(() => {
-    // Reset audit scorecard when a new prediction is triggered or settings change
+    // Only reset audit data if we change architecture or prediction type, 
+    // not on every forecastResult update which might just be an optimization result.
     setAuditData(null);
-  }, [forecastResult, architecture, predictionType]);
+  }, [architecture, predictionType]);
 
   useEffect(() => {
     let interval;
@@ -790,16 +790,16 @@ export default function BatteryDashboard({
               <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {predictionHorizon || 'Current View'}</h4>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(optimizerResult.total_cost_eur || 0) >= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (optimizerResult.total_cost_eur || 0) >= 0 ? THEME.success : THEME.danger }}>{(optimizerResult.total_cost_eur || 0) < 0 ? '-' : ''}€{Math.abs(optimizerResult.total_cost_eur || 0).toFixed(2)}</div>
+                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(optimizerResult.total_cost_eur || 0) <= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (optimizerResult.total_cost_eur || 0) <= 0 ? THEME.success : THEME.danger }}>{(optimizerResult.total_cost_eur || 0) < 0 ? '-' : ''}€{Math.abs(optimizerResult.total_cost_eur || 0).toFixed(2)}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>Savings</div>
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: THEME.success }}>€{Math.abs(optimizerResult.savings_eur || 0).toFixed(2)} ({Math.abs(optimizerResult.savings_pct || 0).toFixed(1)}%)</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(optimizerResult.baseline_cost_eur || 0) >= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 600, color: (optimizerResult.baseline_cost_eur || 0) >= 0 ? THEME.success : THEME.danger }}>{(optimizerResult.baseline_cost_eur || 0) < 0 ? '-' : ''}€{Math.abs(optimizerResult.baseline_cost_eur || 0).toFixed(2)}</div>
+                  <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(optimizerResult.baseline_cost_eur || 0) <= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
+                  <div style={{ fontSize: '1rem', fontWeight: 600, color: (optimizerResult.baseline_cost_eur || 0) <= 0 ? THEME.success : THEME.danger }}>{(optimizerResult.baseline_cost_eur || 0) < 0 ? '-' : ''}€{Math.abs(optimizerResult.baseline_cost_eur || 0).toFixed(2)}</div>
                 </div>
               </div>
             </div>
@@ -818,12 +818,12 @@ export default function BatteryDashboard({
                             <h4 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: THEME.success, marginBottom: '0.5rem' }}>Total Bill: {data.period}</h4>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                                 <div>
-                                    <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.optimized_bill || 0) >= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
-                                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (data?.optimization?.optimized_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.optimized_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.optimized_bill || 0).toFixed(2)}</div>
+                                    <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.optimized_bill || 0) <= 0 ? 'Net Revenue (With Battery)' : 'Net Cost (With Battery)'}</div>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 800, color: (data?.optimization?.optimized_bill || 0) <= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.optimized_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.optimized_bill || 0).toFixed(2)}</div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.baseline_bill || 0) >= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
-                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: (data?.optimization?.baseline_bill || 0) >= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.baseline_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.baseline_bill || 0).toFixed(2)}</div>
+                                    <div style={{ fontSize: '0.65rem', color: THEME.textSecondary }}>{(data?.optimization?.baseline_bill || 0) <= 0 ? 'Net Revenue (No Battery)' : 'Net Cost (No Battery)'}</div>
+                                    <div style={{ fontSize: '1rem', fontWeight: 600, color: (data?.optimization?.baseline_bill || 0) <= 0 ? THEME.success : THEME.danger }}>{(data?.optimization?.baseline_bill || 0) < 0 ? '-' : ''}€{Math.abs(data?.optimization?.baseline_bill || 0).toFixed(2)}</div>
                                 </div>
                             </div>
                             <div style={{ marginTop: '0.5rem', fontSize: '0.7rem', color: THEME.success, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -867,8 +867,8 @@ export default function BatteryDashboard({
                     discharge = optimizerResult.discharge_schedule?.[i] || 0;
                     price = priceHistory?.prices?.[i] || 0;
                     soc = optimizerResult.soc_trajectory?.[i] || 0;
-                    pnl = (optimizerResult.grid_import?.[i] || 0) * price * 0.25 * -1
-                      + (optimizerResult.grid_export?.[i] || 0) * price * 0.8 * 0.25;
+                    pnl = (optimizerResult.grid_import?.[i] || 0) * price * 0.25
+                      - (optimizerResult.grid_export?.[i] || 0) * price * 0.8 * 0.25;
                   } else {
                     // Audit row from backend schedule
                     const data = rows[i];
@@ -878,7 +878,7 @@ export default function BatteryDashboard({
                     discharge = isScheduleRow ? (data.action_p_bat > 0 ? data.action_p_bat : 0) : (activeAuditData?.optimization?.discharge_schedule?.[i] || 0);
                     price = isScheduleRow ? (activeAuditData?.series?.[i]?.selling_price_eur_kwh || 0) : (activeAuditData?.prices?.[i] || 0);
                     soc = isScheduleRow ? data.soc : (activeAuditData?.optimization?.soc?.[i] || 0);
-                    pnl = isScheduleRow ? data.cost_eur : ((discharge - charge) * price * 0.25);
+                    pnl = isScheduleRow ? data.cost_eur : ((charge - discharge) * price * 0.25);
                   }
 
                   if (!t) return null;
@@ -893,8 +893,8 @@ export default function BatteryDashboard({
                       <td className="mono">{(charge > discharge ? charge : discharge).toFixed(3)}</td>
                       <td className="mono">€{price.toFixed(3)}</td>
                       <td className="mono">{(soc * 100).toFixed(1)}%</td>
-                      <td className={`mono pnl ${pnl >= 0 ? 'plus' : ''}`}>
-                        {pnl.toFixed(4)}€
+                      <td className={`mono pnl ${pnl > 0 ? 'plus' : ''}`} style={{ color: pnl > 0 ? THEME.danger : THEME.success }}>
+                        {pnl >= 0 ? '' : '-'}{Math.abs(pnl).toFixed(4)}€
                       </td>
                     </tr>
                   );
@@ -911,6 +911,14 @@ export default function BatteryDashboard({
         <KPICard title="Current SOC" value={`${stats.soc.toFixed(1)}%`} icon={<Battery size={22} />} color={stats.soc > 50 ? THEME.success : stats.soc > 20 ? THEME.warning : THEME.danger} sparkData={optimizerResult?.soc_trajectory || []} />
         <KPICard title="Grid Import Now" value={`${stats.grid.toFixed(2)} kW`} icon={<Zap size={22} />} color={THEME.accent} sparkData={optimizerResult?.grid_import || historicalData?.map(d => d.grid_p) || []} />
         <KPICard title="Solar Generation" value={`${stats.solar.toFixed(2)} kW`} icon={<Sun size={22} />} color={THEME.solar} sparkData={forecastResult?.solar_forecast || historicalData?.map(d => d.pv_p) || []} />
+        {auditData && (
+          <KPICard 
+            title="Model Error (NRMSE)" 
+            value={`${auditData.overall_nrmse}%`} 
+            icon={<Target size={22} />} 
+            color={auditData.overall_nrmse < 15 ? THEME.success : THEME.warning} 
+          />
+        )}
 
         <div className="bloomberg-card constraints-card" style={{ borderLeft: `4px solid ${THEME.accent}` }}>
           <div className="card-header" style={{ marginBottom: '0.5rem' }}>
